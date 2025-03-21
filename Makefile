@@ -5,13 +5,13 @@ obj-m := CharDriver.o
 KERNELDIR := /lib/modules/$(shell uname -r)/build
 SRC := src
 
+CFLAGS_MODULE := -I$(KERNELDIR)/include
+
 all:
 	@clear
-	# Compile the module by telling make to look for CharDriver.c in the src directory
 	make -C $(KERNELDIR) M=$(PWD) SRC=$(SRC) modules
 
 %.o: $(SRC)/%.c
-	# Compile CharDriver.c from the src folder into an object file
 	$(CC) $(CFLAGS_MODULE) -c $< -o $@
 
 clean:
