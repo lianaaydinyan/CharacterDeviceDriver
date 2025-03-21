@@ -4,8 +4,6 @@ CONFIG_MODULE_SIG_ALL=n
 obj-m := CharDriver.o
 KERNELDIR := /lib/modules/$(shell uname -r)/build
 
-# CFLAGS_MODULE := -I$(KERNELDIR)/include
-
 all:
 	@clear
 	make -C $(KERNELDIR) M=$(PWD) modules
