@@ -3,10 +3,16 @@ CONFIG_MODULE_SIG_ALL=n
 
 obj-m := CharDriver.o
 KERNELDIR := /lib/modules/$(shell uname -r)/build
+SRC := src
 
 all:
 	@clear
-	make -C $(KERNELDIR) M=$(PWD) modules
+	# Compile the module by telling make to look for CharDriver.c in the src directory
+	make -C $(KERNELDIR) M=$(PWD) SRC=$(SRC) modules
+
+%.o: $(SRC)/%.c
+	# Compile CharDriver.c from the src folder into an object file
+	$(CC) $(CFLAGS_MODULE) -c $< -o $@
 
 clean:
 	@clear
@@ -36,6 +42,3 @@ unload:
 	@echo Unloading module from the kernel
 	rmmod CharDriver
 	@echo ~DONE~
-
-
-.PHONY: make all load unload

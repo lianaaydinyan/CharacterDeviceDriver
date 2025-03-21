@@ -11,6 +11,8 @@ The driver interacts with `/dev/liana` and generates a formatted hex dump simila
 - **Kernel Memory Management**: Uses `kmalloc` and `kfree` for memory allocation.
 
 ## 🚀 Installation & Usage
+#### Note:
+#### This project was developed and tested on Debian, running in a Google Cloud VM. If using a similar setup, ensure you have administrative privileges and follow these steps.
 ### 1️⃣ Build the Module
 ```sh
 make
