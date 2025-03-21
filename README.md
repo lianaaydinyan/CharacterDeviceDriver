@@ -1,7 +1,3 @@
-Here is the modified version with the "Create Device File" section removed:
-
----
-
 # Character Device Driver with Hexdump Output
 
 ## 📌 Overview
