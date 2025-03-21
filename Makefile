@@ -3,16 +3,12 @@ CONFIG_MODULE_SIG_ALL=n
 
 obj-m := CharDriver.o
 KERNELDIR := /lib/modules/$(shell uname -r)/build
-SRC := src
 
-CFLAGS_MODULE := -I$(KERNELDIR)/include
+# CFLAGS_MODULE := -I$(KERNELDIR)/include
 
 all:
 	@clear
-	make -C $(KERNELDIR) M=$(PWD) SRC=$(SRC) modules
-
-%.o: $(SRC)/%.c
-	$(CC) $(CFLAGS_MODULE) -c $< -o $@
+	make -C $(KERNELDIR) M=$(PWD) modules
 
 clean:
 	@clear
