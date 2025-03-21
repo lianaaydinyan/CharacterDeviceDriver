@@ -18,12 +18,9 @@ static int loop_release(struct inode * inode, struct file * file)
         return 0;
 }
 
-static ssize_t loop_read(struct file * filp,
-                        char __user * buf,
-                        size_t len,
-                        loff_t* off)
+static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset)
 {
-        if (copy_to_user(buf, kernel_buffer, MESSAGE_SIZE)){
+        if (copy_to_user(buffer, kernel_buffer, MESSAGE_SIZE)){
                 printk(KERN_ERR "[ERROR]...Failed to copy data to user space");
                 return -EFAULT;
         }
@@ -77,7 +74,8 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     
         for (int j = 0; j < line_len; j += 2)
         {
-            if (j + 1 < line_len) {
+            if (j + 1 < line_len)
+            {
                 offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x%02x", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
                 if (j + 2 < line_len)
                     offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, " ");
@@ -85,7 +83,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
             else
                 offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
         }
-        while (offset_chars < 47)
+        while (offset_chars < ROW_SPACE_HEX)
             hex_buffer[offset_chars++] = ' ';
         hex_buffer[offset_chars] = '\n';
         hex_buffer[offset_chars + 1] = '\0';
@@ -142,9 +140,7 @@ static int __init loop_init(void)
 static void __exit loop_exit(void)
 {
     if (output_file)
-    {
         filp_close(output_file, NULL);
-    }
     device_destroy(loop_class, MKDEV(major_number, 0));
     class_unregister(loop_class);
     class_destroy(loop_class);

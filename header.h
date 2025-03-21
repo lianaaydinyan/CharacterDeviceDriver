@@ -15,6 +15,7 @@
 # define OUTPUT_FILE_PATH "/tmp/output"
 # define BUFFER_SIZE 1024
 # define MESSAGE_SIZE 1024
+# define ROW_SPACE_HEX 47
 
 struct file             *output_file;
 dev_t                   dev_fd = 0;
@@ -26,7 +27,7 @@ static struct device*   loop_device = NULL;
 static int              loop_open(struct inode* inodep, struct file* filep);
 static int              loop_release(struct inode* inodep, struct file* filep);
 static ssize_t          loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset);
-static ssize_t          loop_read(struct file * filp, char __user * buf, size_t len, loff_t* off);
+static ssize_t          loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset);
 
 static struct file_operations fops =
 {
