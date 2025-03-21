@@ -4,27 +4,27 @@ static int loop_open(struct inode *inode, struct file * file)
 {
         if (0 == (kernel_buffer = kmalloc(MESSAGE_SIZE, GFP_KERNEL)))
         {
-                printk(KERN_INFO "[INFO] ... Cannot allocate memory\n");
+                printk(KERN_INFO "Cannot allocate memory\n");
                 return -1;
         }
-        printk(KERN_INFO "[INFO] ... Device file opened \n");
+        printk(KERN_INFO "Device file opened \n");
         return 0;
 }
 
 static int loop_release(struct inode * inode, struct file * file)
 {
         kfree(kernel_buffer); 
-        printk(KERN_INFO "[INFO] ... Device file closed\n");
+        printk(KERN_INFO "Device file closed\n");
         return 0;
 }
 
 static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset)
 {
         if (copy_to_user(buffer, kernel_buffer, MESSAGE_SIZE)){
-                printk(KERN_ERR "[ERROR]...Failed to copy data to user space");
+                printk(KERN_ERR "Failed to copy data to user space");
                 return -EFAULT;
         }
-        printk(KERN_INFO "[INFO] Data Read Done \n");
+        printk(KERN_INFO "Data Read Done \n");
         return MESSAGE_SIZE;
 }
 
@@ -55,16 +55,17 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         padded_len++;
     }
 
+     // Open output file in write mode (create it if it doesn't exist)
     if (!output_file) {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (IS_ERR(output_file)) {
-            printk(KERN_ERR "loop: Failed to open output file\n");
+            printk(KERN_ERR "loop: Failed to open file\n");
             ret = PTR_ERR(output_file);
             output_file = NULL;
             goto out;
         }
     }
-
+    // Prepare hex formatting and write to the output file
     size_t i = 0;
     char hex_buffer[80];
     while (i < padded_len)
@@ -83,6 +84,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
             else
                 offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
         }
+        // Fill spaces until the required column width is reached as hexdump does
         while (offset_chars < ROW_SPACE_HEX)
             hex_buffer[offset_chars++] = ' ';
         hex_buffer[offset_chars] = '\n';
@@ -90,32 +92,30 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
         if (ret < 0)
         {
-            printk(KERN_ERR "loop: Failed to write to file\n");
+            printk(KERN_ERR "loop: Failed to write in file\n");
             goto out;
         }
         i += 16;
     }
-    
-
     snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
-
     ret = len;
-
 out:
     kfree(kernel_buffer);
     return ret;
 }
 
+// module loading
 static int __init loop_init(void)
 {
+    // Register the character device
     major_number = register_chrdev(0, DEVICE_NAME, &fops);
     if (major_number < 0)
     {
         printk(KERN_ERR "loop: Failed to register a major number\n");
         return major_number;
     }
-
+    // Create the device class
     loop_class = class_create(THIS_MODULE, DEVICE_NAME);
     if (IS_ERR(loop_class))
     {
@@ -123,7 +123,7 @@ static int __init loop_init(void)
         printk(KERN_ERR "loop: Failed to register device class\n");
         return PTR_ERR(loop_class);
     }
-
+     // Create the device node in /dev
     loop_device = device_create(loop_class, NULL, MKDEV(major_number, 0), NULL, DEVICE_NAME);
     if (IS_ERR(loop_device))
     {
@@ -137,6 +137,7 @@ static int __init loop_init(void)
     return 0;
 }
 
+//moduel unloading
 static void __exit loop_exit(void)
 {
     if (output_file)
