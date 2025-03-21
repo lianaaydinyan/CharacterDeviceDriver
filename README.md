@@ -1,3 +1,7 @@
+Here is the modified version with the "Create Device File" section removed:
+
+---
+
 # Character Device Driver with Hexdump Output
 
 ## 📌 Overview
@@ -17,25 +21,18 @@ make
 ```
 ### 2️⃣ Load the Module
 ```sh
-sudo insmod CharDriver.ko
+make load
 ```
-### 3️⃣ Create Device File
-```sh
-sudo mknod /dev/liana c <CharDriver> 0
-sudo chmod 666 /dev/liana
-```
-_(Replace `<CharDriver>` with the value from `dmesg`)_
 
-### 4️⃣ Write Data to the Device
+### 3️⃣ Write Data to the Device
 ```sh
 echo -n "Hello" > /dev/liana
 ```
 
-### 5️⃣ Generate Hexdump and Compare Output
+### 4️⃣ Run check.sh file
 ```sh
-cat my_file.bin > /dev/liana
-hexdump my_file.bin > /tmp/output1
-diff /tmp/output /tmp/output1
+chmod 777 check.sh
+./check.sh
 ```
 
 ## 📄 Example Output
@@ -44,24 +41,20 @@ diff /tmp/output /tmp/output1
 00000005
 ```
 
-## 🛠 Unload the Module
+## 🛠 Unload the Module & Cleanup
 ```sh
-sudo rmmod loop
+make unload
 ```
 
-## 🛠 Cleanup
-```sh
-sudo rm /dev/loop
-```
+
 
 ## 📝 Troubleshooting
 - **Module Not Found?** Try `dmesg | tail -n 20` for errors.
-- **Permission Issues?** Run commands with `sudo`.
+- **Permission Issues?** Run command with `sudo su` after that try one more time.
 - **Major Number Missing?** Check `cat /proc/devices`.
 
 ## 👨‍💻 Author
 **lianaaydinyan**
 
 ## 📜 License
-This project is licensed under the **GPL v2** license.
-
+This project is licensed under the **GPL v2** license.  
