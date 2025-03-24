@@ -28,7 +28,45 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
         return MESSAGE_SIZE;
 }
 
+static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t padded_len, loff_t *pos)
+{
+    size_t i = 0;
+    char hex_buffer[80];
 
+    while (i < padded_len)
+    {
+        int line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
+        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (unsigned int)i);
+
+        for (int j = 0; j < line_len; j += 2)
+        {
+            if (j + 1 < line_len)
+            {
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x%02x", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
+                if (j + 2 < line_len)
+                    offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, " ");
+            }
+            else
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
+        }
+
+        while (offset_chars < ROW_SPACE_HEX)
+            hex_buffer[offset_chars++] = ' ';
+
+        hex_buffer[offset_chars] = '\n';
+        hex_buffer[offset_chars + 1] = '\0';
+
+        if (kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos) < 0)
+        {
+            printk(KERN_ERR "loop: Failed to write in file\n");
+            return;
+        }
+        i += 16;
+    }
+
+    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)padded_len);
+    kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
+}
 
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
@@ -57,7 +95,6 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         padded_len++;
     }
 
-     // Open output file in write mode (create it if it doesn't exist)
     if (!output_file) {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (IS_ERR(output_file)) {
@@ -67,46 +104,13 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
             goto out;
         }
     }
-    // Prepare hex formatting and write to the output file
-    size_t i = 0;
-    char hex_buffer[80];
-    while (i < padded_len)
-    {
-        int line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
-        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (unsigned int)i);
-    
-        for (int j = 0; j < line_len; j += 2)
-        {
-            if (j + 1 < line_len)
-            {
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x%02x", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
-                if (j + 2 < line_len)
-                    offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, " ");
-            }
-            else
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
-        }
-        // Fill spaces until the required column width is reached as hexdump does
-        while (offset_chars < ROW_SPACE_HEX)
-            hex_buffer[offset_chars++] = ' ';
-        hex_buffer[offset_chars] = '\n';
-        hex_buffer[offset_chars + 1] = '\0';
-        ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
-        if (ret < 0)
-        {
-            printk(KERN_ERR "loop: Failed to write in file\n");
-            goto out;
-        }
-        i += 16;
-    }
-    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len);
-    kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+    write_hex_dump(output_file, kernel_buffer, padded_len, &pos);
     ret = len;
+
 out:
     kvfree(kernel_buffer);
     return ret;
 }
-
 
 
 // module loading
