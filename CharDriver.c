@@ -69,7 +69,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     ssize_t ret = 0;
     loff_t pos = 0;
 
-    kernel_buffer = kvmalloc(len, GFP_KERNEL);
+    kernel_buffer = kvmalloc(len + 1, GFP_KERNEL);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
