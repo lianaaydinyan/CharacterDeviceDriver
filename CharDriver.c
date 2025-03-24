@@ -54,49 +54,41 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
     snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)padded_len);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
 }
-static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
+static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    struct file *output_file;
+    char local_buffer[512];  // Fixed stack buffer (must be small)
+    ssize_t total_written = 0;
     loff_t pos = 0;
-    char hex_buffer[48]; // Small stack buffer for hex formatting
-    ssize_t bytes_written = 0;
-    ssize_t ret;
-    size_t i = 0;
-    char tmp_buf[2]; // Temporary buffer for per-byte reads
 
-    // Open the output file
-    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (IS_ERR(output_file))
-        return PTR_ERR(output_file);
-
-    while (i < len)
-    {
-        // Copy a single byte from user space
-        if (copy_from_user(tmp_buf, buffer + i, 1))
-        {
-            printk(KERN_ERR "loop: Failed to copy byte from user\n");
-            ret = -EFAULT;
-            goto out;
+    // Open file if not already opened
+    if (!output_file) {
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        if (IS_ERR(output_file)) {
+            printk(KERN_ERR "loop: Failed to open file\n");
+            return PTR_ERR(output_file);
         }
-
-        // Format the byte as hex and write to file
-        snprintf(hex_buffer, sizeof(hex_buffer), "%07zx: %02x\n", i, tmp_buf[0] & 0xFF);
-        ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
-        if (ret < 0)
-        {
-            printk(KERN_ERR "loop: Failed to write to file\n");
-            goto out;
-        }
-
-        bytes_written++;
-        i++;
     }
 
-    ret = bytes_written;
+    while (len > 0) {
+        size_t chunk = min(len, sizeof(local_buffer));  // Process in 512-byte chunks
 
-out:
-    filp_close(output_file, NULL);
-    return ret;
+        if (copy_from_user(local_buffer, buffer, chunk)) {
+            printk(KERN_ERR "loop: copy_from_user failed!\n");
+            return -EFAULT;
+        }
+
+        // Write to output file
+        if (kernel_write(output_file, local_buffer, chunk, &pos) < 0) {
+            printk(KERN_ERR "loop: Failed to write to file\n");
+            return -EIO;
+        }
+
+        total_written += chunk;
+        buffer += chunk;
+        len -= chunk;
+    }
+
+    return total_written;
 }
 
 // module loading
