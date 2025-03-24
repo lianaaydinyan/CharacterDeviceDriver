@@ -56,11 +56,10 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
 }
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    char local_buffer[512];  // Fixed stack buffer (must be small)
+    char local_buffer[4096];  // Larger buffer to reduce syscall overhead
     ssize_t total_written = 0;
     loff_t pos = 0;
 
-    // Open file if not already opened
     if (!output_file) {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (IS_ERR(output_file)) {
@@ -70,22 +69,22 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     }
 
     while (len > 0) {
-        size_t chunk = min(len, sizeof(local_buffer));  // Process in 512-byte chunks
+        size_t chunk = min(len, sizeof(local_buffer));
 
         if (copy_from_user(local_buffer, buffer, chunk)) {
             printk(KERN_ERR "loop: copy_from_user failed!\n");
             return -EFAULT;
         }
 
-        // Write to output file
-        if (kernel_write(output_file, local_buffer, chunk, &pos) < 0) {
-            printk(KERN_ERR "loop: Failed to write to file\n");
+        ssize_t written = kernel_write(output_file, local_buffer, chunk, &pos);
+        if (written < 0) {
+            printk(KERN_ERR "loop: kernel_write failed!\n");
             return -EIO;
         }
 
-        total_written += chunk;
-        buffer += chunk;
-        len -= chunk;
+        total_written += written;
+        buffer += written;
+        len -= written;
     }
 
     return total_written;
