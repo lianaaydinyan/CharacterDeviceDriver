@@ -44,4 +44,9 @@ struct my_device_d
     char buffer[BUFFER_SIZE];
 };
 
+#define DEVICE_BUFFER_SIZE (1024 * 1024 * 100) // 100MB buffer
+
+static char *device_buffer;
+static size_t buffer_size = 0;
+
 #endif
