@@ -48,6 +48,13 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
+    int padded_len = len;
+    if (len % 2 != 0)
+    {
+        kernel_buffer[len] = 0x00;
+        padded_len++;
+    }
+
     output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (IS_ERR(output_file))
     {
