@@ -36,7 +36,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     char* kernel_buffer;
 
     // Allocate buffer to store user data
-    kernel_buffer = vmalloc(len);
+    kernel_buffer = kvmalloc(len);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
@@ -71,7 +71,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     filp_close(output_file, NULL); // Close file after writing
 
 out:
-    vfree(kernel_buffer); // Free allocated buffer
+    kvfree(kernel_buffer); // Free allocated buffer
     return ret; // Ensure the full `len` is returned
 }
 
