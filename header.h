@@ -13,7 +13,7 @@
 
 # define DEVICE_NAME "liana" // I hade already loop divess 
 # define OUTPUT_FILE_PATH "/tmp/output"
-# define BUFFER_SIZE 1024
+# define BUFFER_SIZE 73741824 // for 1G
 # define MESSAGE_SIZE 1024
 # define ROW_SPACE_HEX 47
 

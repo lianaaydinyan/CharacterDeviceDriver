@@ -2,30 +2,20 @@
 
 static int loop_open(struct inode *inode, struct file * file)
 {
-        if (0 == (kernel_buffer = kmalloc(MESSAGE_SIZE, GFP_KERNEL)))
-        {
-                printk(KERN_INFO "Cannot allocate memory\n");
-                return -1;
-        }
-        printk(KERN_INFO "Device file opened \n");
-        return 0;
+    printk(KERN_INFO "Device file opened \n");
+    return 0;
 }
 
 static int loop_release(struct inode * inode, struct file * file)
 {
-        kfree(kernel_buffer); 
-        printk(KERN_INFO "Device file closed\n");
-        return 0;
+    printk(KERN_INFO "Device file closed\n");
+    return 0;
 }
 
 static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset)
 {
-        if (copy_to_user(buffer, kernel_buffer, MESSAGE_SIZE)){
-                printk(KERN_ERR "Failed to copy data to user space");
-                return -EFAULT;
-        }
-        printk(KERN_INFO "Data Read Done \n");
-        return MESSAGE_SIZE;
+   printk(KERN_INFO "Data Read Done \n");
+   return MESSAGE_SIZE;
 }
 
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
@@ -34,12 +24,12 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     ssize_t ret = 0;
     loff_t pos = 0;
 
-    kernel_buffer = kmalloc(len + 1, GFP_KERNEL);
-    if (!kernel_buffer)
-    {
-        printk(KERN_ERR "loop: Failed to allocate memory\n");
-        return -ENOMEM;
-    }
+    // kernel_buffer = kmalloc(len + 1, GFP_KERNEL);
+    // if (!kernel_buffer)
+    // {
+    //     printk(KERN_ERR "loop: Failed to allocate memory\n");
+    //     return -ENOMEM;
+    // }
 
     if (copy_from_user(kernel_buffer, buffer, len))
     {
