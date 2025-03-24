@@ -2,28 +2,20 @@
 
 static int loop_open(struct inode *inode, struct file * file)
 {
-        if (0 == (kernel_buffer = kmalloc(MESSAGE_SIZE, GFP_KERNEL)))
-        {
-                printk(KERN_INFO "Cannot allocate memory\n");
-                return -1;
-        }
+
         printk(KERN_INFO "Device file opened \n");
         return 0;
 }
 
 static int loop_release(struct inode * inode, struct file * file)
 {
-        kfree(kernel_buffer); 
         printk(KERN_INFO "Device file closed\n");
         return 0;
 }
 
 static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset)
 {
-        if (copy_to_user(buffer, kernel_buffer, MESSAGE_SIZE)){
-                printk(KERN_ERR "Failed to copy data to user space");
-                return -EFAULT;
-        }
+
         printk(KERN_INFO "Data Read Done \n");
         return MESSAGE_SIZE;
 }
@@ -62,51 +54,50 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
     snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)padded_len);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
 }
-
-static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
+static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
 {
-    char* kernel_buffer;
-    ssize_t ret = 0;
+    struct file *output_file;
     loff_t pos = 0;
+    char hex_buffer[48]; // Small stack buffer for hex formatting
+    ssize_t bytes_written = 0;
+    ssize_t ret;
+    size_t i = 0;
+    char tmp_buf[2]; // Temporary buffer for per-byte reads
 
-    kernel_buffer = kvmalloc(len + 1, GFP_KERNEL);
-    if (!kernel_buffer)
+    // Open the output file
+    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (IS_ERR(output_file))
+        return PTR_ERR(output_file);
+
+    while (i < len)
     {
-        printk(KERN_ERR "loop: Failed to allocate memory\n");
-        return -ENOMEM;
-    }
-
-    if (copy_from_user(kernel_buffer, buffer, len))
-    {
-        printk(KERN_ERR "loop: Failed to copy data from user\n");
-        ret = -EFAULT;
-        goto out;
-    }
-
-    int padded_len = len;
-    if (len % 2 != 0)
-    {
-        kernel_buffer[len] = 0x00;
-        padded_len++;
-    }
-
-    if (!output_file) {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
-        if (IS_ERR(output_file)) {
-            printk(KERN_ERR "loop: Failed to open file\n");
-            ret = PTR_ERR(output_file);
-            output_file = NULL;
+        // Copy a single byte from user space
+        if (copy_from_user(tmp_buf, buffer + i, 1))
+        {
+            printk(KERN_ERR "loop: Failed to copy byte from user\n");
+            ret = -EFAULT;
             goto out;
         }
+
+        // Format the byte as hex and write to file
+        snprintf(hex_buffer, sizeof(hex_buffer), "%07zx: %02x\n", i, tmp_buf[0] & 0xFF);
+        ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+        if (ret < 0)
+        {
+            printk(KERN_ERR "loop: Failed to write to file\n");
+            goto out;
+        }
+
+        bytes_written++;
+        i++;
     }
-    write_hex_dump(output_file, kernel_buffer, padded_len, &pos);
-    ret = len;
+
+    ret = bytes_written;
 
 out:
-    kvfree(kernel_buffer);
+    filp_close(output_file, NULL);
     return ret;
 }
-
 
 // module loading
 static int __init loop_init(void)
