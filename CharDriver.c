@@ -27,12 +27,14 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
         printk(KERN_INFO "Data Read Done \n");
         return MESSAGE_SIZE;
 }
+
+
+
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    struct file* output_file;
-    loff_t pos = 0;
-    ssize_t ret = len;
     char* kernel_buffer;
+    ssize_t ret = 0;
+    loff_t pos = 0;
 
     kernel_buffer = kvmalloc(len, GFP_KERNEL);
     if (!kernel_buffer)
@@ -55,15 +57,16 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         padded_len++;
     }
 
-    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (IS_ERR(output_file))
-    {
-        printk(KERN_ERR "loop: Failed to open file\n");
-        ret = PTR_ERR(output_file);
-        goto out;
+     // Open output file in write mode (create it if it doesn't exist)
+    if (!output_file) {
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        if (IS_ERR(output_file)) {
+            printk(KERN_ERR "loop: Failed to open file\n");
+            ret = PTR_ERR(output_file);
+            output_file = NULL;
+            goto out;
+        }
     }
-
-// Prepare hex formatting and write to the output file
     // Prepare hex formatting and write to the output file
     size_t i = 0;
     char hex_buffer[80];
@@ -99,12 +102,11 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
     ret = len;
-    filp_close(output_file, NULL); // Close file after writing
-
 out:
     kvfree(kernel_buffer);
     return ret;
 }
+
 
 
 // module loading
