@@ -20,12 +20,11 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
 
 
 #define CHUNK_SIZE 4096  // Read in 4KB chunks
-
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
     char *kernel_buffer;
-    ssize_t ret = 0, i;
-    loff_t pos = *offset;  
+    ssize_t ret = 0;
+    loff_t pos = *offset;
     size_t chunk_len;
     char hex_buffer[80];
 
@@ -34,7 +33,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
 
     if (!output_file)
     {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (IS_ERR(output_file))
         {
             printk(KERN_ERR "loop: Failed to open output file\n");
@@ -42,21 +41,21 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
     }
 
-    kernel_buffer = kmalloc(CHUNK_SIZE, GFP_KERNEL);
+    kernel_buffer = kmalloc(PAGE_SIZE, GFP_KERNEL);
     if (!kernel_buffer)
         return -ENOMEM;
 
     while (len > 0)
     {
-        chunk_len = (len > CHUNK_SIZE) ? CHUNK_SIZE : len;
+        chunk_len = (len > PAGE_SIZE) ? PAGE_SIZE : len;
 
-        if (copy_from_user(kernel_buffer, buffer + (pos - *offset), chunk_len))
+        if (copy_from_user(kernel_buffer, buffer, chunk_len))
         {
             ret = -EFAULT;
             goto out;
         }
 
-        for (i = 0; i < chunk_len; i += 16)
+        for (size_t i = 0; i < chunk_len; i += 16)
         {
             int j, line_len = (chunk_len - i >= 16) ? 16 : chunk_len - i;
             int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07llx ", (unsigned long long)(pos + i));
@@ -69,7 +68,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
                     offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x ", kernel_buffer[i + j]);
             }
 
-            while (offset_chars < 47)
+            while (offset_chars < 56)
                 hex_buffer[offset_chars++] = ' ';
 
             hex_buffer[offset_chars++] = '\n';
@@ -81,17 +80,17 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
 
         pos += chunk_len;
+        buffer += chunk_len;
         len -= chunk_len;
     }
 
     *offset = pos;
-    ret = pos - *offset;  
+    ret = pos - *offset;
 
 out:
     kfree(kernel_buffer);
     return ret;
 }
-
 
 
 // module loading
