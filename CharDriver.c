@@ -36,7 +36,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     char* kernel_buffer;
 
     // Allocate buffer to store user data
-    kernel_buffer = kvmalloc(len);
+    kernel_buffer = kvmalloc(len, GFP_KERNEL);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
