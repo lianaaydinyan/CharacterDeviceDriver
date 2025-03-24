@@ -56,10 +56,10 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
+// Prepare hex formatting and write to the output file
     // Prepare hex formatting and write to the output file
     size_t i = 0;
     char hex_buffer[80];
-    size_t padded_len = (len + 15) & ~15;  // Align to 16-byte boundary
     while (i < padded_len)
     {
         int line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
@@ -76,21 +76,19 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
             else
                 offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
         }
-
-        while (offset_chars < 79) // Ensure spacing like `hexdump`
+        // Fill spaces until the required column width is reached as hexdump does
+        while (offset_chars < ROW_SPACE_HEX)
             hex_buffer[offset_chars++] = ' ';
         hex_buffer[offset_chars] = '\n';
         hex_buffer[offset_chars + 1] = '\0';
-
         ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
         if (ret < 0)
         {
-            printk(KERN_ERR "loop: Failed to write to file\n");
+            printk(KERN_ERR "loop: Failed to write in file\n");
             goto out;
         }
         i += 16;
     }
-
     snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
     ret = len;
