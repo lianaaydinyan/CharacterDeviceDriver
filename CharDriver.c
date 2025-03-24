@@ -30,18 +30,20 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
 
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    char* kernel_buffer;
     struct file* output_file;
     loff_t pos = 0;
     ssize_t ret = len;
+    char* kernel_buffer;
 
-    kernel_buffer = kmalloc(len + 1, GFP_KERNEL);
+    // Allocate buffer to store user data
+    kernel_buffer = vmalloc(len);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
         return -ENOMEM;
     }
 
+    // Copy data from user space to kernel space
     if (copy_from_user(kernel_buffer, buffer, len))
     {
         printk(KERN_ERR "loop: Failed to copy data from user\n");
@@ -49,37 +51,28 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    kernel_buffer[len] = 0x00; // Null-terminate for safety
-
-    // Open output file
-    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
-    if (IS_ERR(output_file)) {
+    // Open output file in APPEND mode to keep adding data
+    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (IS_ERR(output_file))
+    {
         printk(KERN_ERR "loop: Failed to open file\n");
         ret = PTR_ERR(output_file);
         goto out;
     }
 
-    char hex_buffer[80];
-    for (size_t i = 0; i < len; i += 16) {
-        size_t line_len = (len - i >= 16) ? 16 : len - i;
-        size_t offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07zx ", i); // Fixed offset format
-
-        for (size_t j = 0; j < line_len; j += 2) {
-            if (j + 1 < line_len)
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x%02x ", kernel_buffer[i + j], kernel_buffer[i + j + 1]);
-            else
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x ", kernel_buffer[i + j]);
-        }
-
-        // Write to file
-        kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+    // Write raw data to the output file
+    ssize_t written = kernel_write(output_file, kernel_buffer, len, &pos);
+    if (written < 0)
+    {
+        printk(KERN_ERR "loop: Failed to write to file\n");
+        ret = written;
     }
 
     filp_close(output_file, NULL); // Close file after writing
 
 out:
-    kfree(kernel_buffer); // Free allocated buffer
-    return ret;
+    vfree(kernel_buffer); // Free allocated buffer
+    return ret; // Ensure the full `len` is returned
 }
 
 // module loading
