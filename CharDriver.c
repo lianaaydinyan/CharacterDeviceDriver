@@ -35,7 +35,6 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     ssize_t ret = len;
     char* kernel_buffer;
 
-    // Allocate buffer to store user data
     kernel_buffer = kvmalloc(len, GFP_KERNEL);
     if (!kernel_buffer)
     {
@@ -43,7 +42,6 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         return -ENOMEM;
     }
 
-    // Copy data from user space to kernel space
     if (copy_from_user(kernel_buffer, buffer, len))
     {
         printk(KERN_ERR "loop: Failed to copy data from user\n");
@@ -51,8 +49,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    // Open output file in APPEND mode to keep adding data
-    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0666);
+    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0777):
     if (IS_ERR(output_file))
     {
         printk(KERN_ERR "loop: Failed to open file\n");
@@ -60,7 +57,6 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    // Write raw data to the output file
     ssize_t written = kernel_write(output_file, kernel_buffer, len, &pos);
     if (written < 0)
     {
