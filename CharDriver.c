@@ -17,91 +17,83 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
    printk(KERN_INFO "Data Read Done \n");
    return MESSAGE_SIZE;
 }
+
+#include <linux/fs.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/kernel.h>
+
+#define CHUNK_SIZE 4096  // Read in 4KB chunks
+
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    char* kernel_buffer;
-    ssize_t ret = 0;
-    loff_t pos = 0;
-    size_t padded_len = len;
+    char *kernel_buffer;
+    ssize_t ret = 0, i, pos = 0;
+    size_t chunk_len;
+    char hex_buffer[80];
 
     if (len == 0)
         return 0;
 
-    if (len > BUFFER_SIZE)
-        return -EINVAL;
-
-    kernel_buffer = vmalloc(len, GFP_KERNEL); 
-    if (!kernel_buffer)
-    {
-        printk(KERN_ERR "loop: Failed to allocate kernel buffer\n");
-        return -ENOMEM;
-    }
-
-    if (copy_from_user(kernel_buffer, buffer, len))
-    {
-        printk(KERN_ERR "loop: Failed to copy data from user\n");
-        kfree(kernel_buffer);
-        return -EFAULT;
-    }
-
-    if (len % 2 != 0)
-    {
-        kernel_buffer[len] = 0x00;
-        padded_len++;
-    }
-
     if (!output_file)
     {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (IS_ERR(output_file))
         {
             printk(KERN_ERR "loop: Failed to open output file\n");
-            kfree(kernel_buffer);
             return PTR_ERR(output_file);
         }
     }
 
-    size_t i = 0;
-    char hex_buffer[256];  
-    while (i < padded_len)
+    kernel_buffer = kmalloc(CHUNK_SIZE, GFP_KERNEL);
+    if (!kernel_buffer)
+        return -ENOMEM;
+
+    while (len > 0)
     {
-        int line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
-        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (unsigned int)(*offset + i));
-
-        for (int j = 0; j < line_len; j += 2)
+        chunk_len = (len > CHUNK_SIZE) ? CHUNK_SIZE : len;
+        
+        if (copy_from_user(kernel_buffer, buffer + pos, chunk_len))
         {
-            if (j + 1 < line_len)
-            {
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars,
-                                         "%02x%02x ", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
-            }
-            else
-            {
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars,
-                                         "00%02x ", kernel_buffer[i + j]);
-            }
+            ret = -EFAULT;
+            goto out;
         }
 
-        hex_buffer[offset_chars++] = '\n';
-        hex_buffer[offset_chars] = '\0';
-
-        ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
-        if (ret < 0)
+        for (i = 0; i < chunk_len; i += 16)
         {
-            printk(KERN_ERR "loop: Failed to write to file\n");
-            kfree(kernel_buffer);
-            return ret;
+            int j, line_len = (chunk_len - i >= 16) ? 16 : chunk_len - i;
+            int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07lx ", *offset + pos + i);
+            
+            for (j = 0; j < line_len; j += 2)
+            {
+                if (j + 1 < line_len)
+                    offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x%02x ", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
+                else
+                    offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x ", kernel_buffer[i + j]);
+            }
+
+            while (offset_chars < 47) 
+                hex_buffer[offset_chars++] = ' ';
+
+            hex_buffer[offset_chars++] = '\n';
+            hex_buffer[offset_chars] = '\0';
+
+            ret = kernel_write(output_file, hex_buffer, offset_chars, &pos);
+            if (ret < 0)
+                goto out;
         }
-        i += 16;
+
+        pos += chunk_len;
+        len -= chunk_len;
     }
 
-    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)(*offset + len));
-    kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+    *offset += pos;ret = pos;
 
-    *offset += len; 
+out:
     kfree(kernel_buffer);
-    return len;
+    return ret;
 }
+
 
 
 // module loading
