@@ -17,23 +17,20 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
    printk(KERN_INFO "Data Read Done \n");
    return MESSAGE_SIZE;
 }
-
-
-#define CHUNK_SIZE 4096  // Read in 4KB chunks
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
     char *kernel_buffer;
     ssize_t ret = 0;
     loff_t pos = *offset;
     size_t chunk_len;
-    char hex_buffer[80];
+    char hex_buffer[256];  
 
     if (len == 0)
         return 0;  
 
     if (!output_file)
     {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (IS_ERR(output_file))
         {
             printk(KERN_ERR "loop: Failed to open output file\n");
@@ -41,7 +38,8 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
     }
 
-    kernel_buffer = kmalloc(PAGE_SIZE, GFP_KERNEL);
+    // Use vmalloc for large buffers instead of kmalloc
+    kernel_buffer = vmalloc(PAGE_SIZE);
     if (!kernel_buffer)
         return -ENOMEM;
 
@@ -74,9 +72,12 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
             hex_buffer[offset_chars++] = '\n';
             hex_buffer[offset_chars] = '\0';
 
-            ret = kernel_write(output_file, hex_buffer, offset_chars, &pos);
-            if (ret < 0)
+            ssize_t written = kernel_write(output_file, hex_buffer, offset_chars, &pos);
+            if (written < 0)
+            {
+                ret = written;
                 goto out;
+            }
         }
 
         pos += chunk_len;
@@ -84,11 +85,11 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         len -= chunk_len;
     }
 
-    *offset = pos;
+    *offset = pos;  // Update offset
     ret = pos - *offset;
 
 out:
-    kfree(kernel_buffer);
+    vfree(kernel_buffer); // Free the large buffer properly
     return ret;
 }
 

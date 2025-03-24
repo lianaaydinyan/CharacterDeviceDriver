@@ -38,4 +38,10 @@ static struct file_operations fops =
         .release        = loop_release,
 };
 
+struct my_device_d
+{
+    struct cdev cdev;
+    char buffer[BUFFER_SIZE];
+};
+
 #endif
