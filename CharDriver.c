@@ -18,26 +18,23 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
    return MESSAGE_SIZE;
 }
 
-#include <linux/fs.h>
-#include <linux/slab.h>
-#include <linux/uaccess.h>
-#include <linux/kernel.h>
 
 #define CHUNK_SIZE 4096  // Read in 4KB chunks
 
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
     char *kernel_buffer;
-    ssize_t ret = 0, i, pos = 0;
+    ssize_t ret = 0, i;
+    loff_t pos = *offset;  
     size_t chunk_len;
     char hex_buffer[80];
 
     if (len == 0)
-        return 0;
+        return 0;  
 
     if (!output_file)
     {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (IS_ERR(output_file))
         {
             printk(KERN_ERR "loop: Failed to open output file\n");
@@ -52,8 +49,8 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     while (len > 0)
     {
         chunk_len = (len > CHUNK_SIZE) ? CHUNK_SIZE : len;
-        
-        if (copy_from_user(kernel_buffer, buffer + pos, chunk_len))
+
+        if (copy_from_user(kernel_buffer, buffer + (pos - *offset), chunk_len))
         {
             ret = -EFAULT;
             goto out;
@@ -62,7 +59,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         for (i = 0; i < chunk_len; i += 16)
         {
             int j, line_len = (chunk_len - i >= 16) ? 16 : chunk_len - i;
-            int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07lx ", *offset + pos + i);
+            int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07llx ", (unsigned long long)(pos + i));
             
             for (j = 0; j < line_len; j += 2)
             {
@@ -72,7 +69,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
                     offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x ", kernel_buffer[i + j]);
             }
 
-            while (offset_chars < 47) 
+            while (offset_chars < 47)
                 hex_buffer[offset_chars++] = ' ';
 
             hex_buffer[offset_chars++] = '\n';
@@ -87,7 +84,8 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         len -= chunk_len;
     }
 
-    *offset += pos;ret = pos;
+    *offset = pos;
+    ret = pos - *offset;  
 
 out:
     kfree(kernel_buffer);
