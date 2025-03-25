@@ -12,8 +12,6 @@
 # include <linux/uaccess.h>
 
 # define DEVICE_NAME "liana" // I hade already loop divess 
-// # define OUTPUT_FILE_PATH "/tmp/output"
-# define BUFFER_SIZE 65536 // for 1G
 # define ROW_SPACE_HEX 47
 # define MESSAGE_SIZE 1024
 
@@ -49,9 +47,9 @@ struct my_device_d
     char buffer[BUFFER_SIZE];
 };
 
-#define DEVICE_BUFFER_SIZE (1024 * 1024 * 100) // 100MB buffer
+// #define DEVICE_BUFFER_SIZE (1024 * 1024 * 100) // 100MB buffer
 
-static char *device_buffer;
-static size_t buffer_size = 0;
+// static char *device_buffer;
+// static size_t buffer_size = 0;
 
 #endif
