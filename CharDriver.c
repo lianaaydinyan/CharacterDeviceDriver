@@ -60,7 +60,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     }
     // Prepare hex formatting and write to the output file
     size_t i = 0;
-    char hex_buffer[60];
+    char hex_buffer[160];
     while (i < padded_len)
     {
         int line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
