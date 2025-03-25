@@ -79,29 +79,13 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
         }
     }
 
-    // Write data in chunks
-    while (len > 0) {
-        size_t chunk_size = (len > WRITE_BUFFER_SIZE) ? WRITE_BUFFER_SIZE : len;
-
-        // Copy chunk from user space to kernel space
-        if (copy_from_user(kernel_buffer, buffer + bytes_written, chunk_size)) {
+        if (copy_from_user(kernel_buffer, buffer, len)) {
             printk(KERN_ERR "loop: Failed to copy data from user\n");
             return -EFAULT;
         }
 
         // Write the chunk directly to the file
         ret = kernel_write(output_file, kernel_buffer, chunk_size, &pos);
-        if (ret < 0) {
-            printk(KERN_ERR "loop: Failed to write to file\n");
-            break;
-        }
-
-        bytes_written += chunk_size;  // Update the total bytes written
-        len -= chunk_size;            // Decrease the remaining bytes to be written
-
-        printk(KERN_INFO "loop: Wrote %zu bytes, %zu bytes remaining\n", chunk_size, len);
-    }
-
     printk(KERN_INFO "loop: Total bytes written: %zu\n", bytes_written);
 
     return bytes_written;
