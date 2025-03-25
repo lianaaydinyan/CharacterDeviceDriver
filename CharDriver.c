@@ -47,11 +47,9 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
         printk(KERN_INFO "Data Read Done \n");
         return MESSAGE_SIZE;
 }
-
 #define CHUNK 16 
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
-    char *kernel_buffer;
     ssize_t ret = 0;
     loff_t pos = 0;
     struct file *out_file;
@@ -63,14 +61,19 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
         return PTR_ERR(out_file);
     
     for (i = 0; i < u_len; i += CHUNK) {
-        size_t chunk = (u_len - i) < CHUNK ? (u_len - i) : CHUNK;
+        size_t chunk = ((u_len - i) < CHUNK) ? (u_len - i) : CHUNK;
         
         char temp[CHUNK];
-        if (copy_from_user(temp, buffer + i, chunk)) {
+        /* copy_from_user() returns the number of bytes that could not be copied.
+           We consider it an error if this is nonzero */
+        if (copy_from_user(temp, buffer + i, chunk) != 0) {
             ret = -EFAULT;
             goto out;
         }
         
+        /* Create a hex dump line.
+         * Example output: "0000000a: 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50\n"
+         */
         int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07zx: ", i);
         for (j = 0; j < chunk; j++) {
             offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x ", (unsigned char)temp[j]);
@@ -88,7 +91,6 @@ out:
     filp_close(out_file, NULL);
     return ret;
 }
-
 
 // module loading
 static int __init loop_init(void)
