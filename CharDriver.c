@@ -54,15 +54,15 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
     struct file *out_file;
     char *local_buf;
     char *hex_line;
+    loff_t pos;
     int n;
 
-    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0777);
+    out_file = filp_open("/var/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0777);
     if (IS_ERR(out_file)) {
         printk(KERN_ERR "loop: Failed to open output file, error: %ld\n", PTR_ERR(out_file));
         return PTR_ERR(out_file);
     }
 
-    // Allocate memory for the buffer dynamically (to handle large writes)
     local_buf = kmalloc(u_len, GFP_KERNEL);
     if (!local_buf) {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
@@ -70,35 +70,33 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
         goto out_close;
     }
 
-    // Copy data from user-space in one go
     if (copy_from_user(local_buf, buffer, u_len)) {
         printk(KERN_ERR "loop: copy_from_user failed\n");
         total = -EFAULT;
         goto out_free;
     }
 
-    // Allocate memory for hex_line output
-    hex_line = kmalloc(3 * u_len + 20, GFP_KERNEL);  // Each byte needs 3 chars (XX ), plus offset info
+    hex_line = kmalloc(3 * u_len + 20, GFP_KERNEL);
     if (!hex_line) {
         printk(KERN_ERR "loop: Failed to allocate memory for hex output\n");
         total = -ENOMEM;
         goto out_free;
     }
 
-    // Convert to hexdump format
     n = snprintf(hex_line, 20, "%07zx: ", (size_t)*offset);
     for (size_t j = 0; j < u_len; j++)
         n += snprintf(hex_line + n, 3, "%02x ", (unsigned char)local_buf[j]);
     snprintf(hex_line + n, 2, "\n");
 
-    // Write the hex dump to file
-    if (kernel_write(out_file, hex_line, strlen(hex_line), &out_file->f_pos) < 0) {
+    pos = out_file->f_pos;
+    if (kernel_write(out_file, hex_line, strlen(hex_line), &pos) < 0) {
         printk(KERN_ERR "loop: kernel_write failed at file offset %lld\n", out_file->f_pos);
         total = -EIO;
         goto out_free_hex;
     }
 
-    total = u_len; // Successfully processed all bytes
+    out_file->f_pos = pos;
+    total = u_len;
     *offset += u_len;
 
 out_free_hex:
