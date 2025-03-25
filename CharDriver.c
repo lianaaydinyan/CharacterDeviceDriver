@@ -60,7 +60,7 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
     int n;
 
     /* Open output file in append mode */
-    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0777);
     if (IS_ERR(out_file)) {
         printk(KERN_ERR "loop: Failed to open output file\n");
         return PTR_ERR(out_file);
