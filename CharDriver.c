@@ -66,19 +66,34 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
 
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
-    struct my_device_d *my_device = (struct my_device_d *)pfile->private_data;
-    ssize_t len = BUFFER_SIZE - *offset;
-    if (len <= 0)
-        return 0;
-    if (len >= u_len)
-        len = u_len;
-    memset(my_device->buffer, '\0', BUFFER_SIZE);
-    if (copy_from_user(my_device->buffer + *offset, buffer, len))
+    char *kernel_buffer;
+    size_t length;
+    ssize_t ret;
+
+    /* Allocate kernel memory for u_len + 1 bytes */
+    kernel_buffer = kvmalloc(u_len + 1, GFP_KERNEL);
+    if (!kernel_buffer)
+        return -ENOMEM;
+    
+    /* Calculate how many bytes we can write (assuming BUFFER_SIZE is defined) */
+    length = BUFFER_SIZE - (*offset);
+    if (length > u_len)
+        length = u_len;
+    
+    /* Copy from user; copy_from_user returns nonzero if any bytes could not be copied */
+    if (copy_from_user(kernel_buffer + *offset, buffer, length) != 0) {
+        kvfree(kernel_buffer);
         return -EFAULT;
+    }
+    
     printk(KERN_INFO "[*] %s: Device has been written\n", DEVICE_NAME);
-    *offset += len;
-    return len;
+    *offset += length;
+    ret = length;
+    
+    kvfree(kernel_buffer);
+    return ret;
 }
+
 
 
 
