@@ -48,90 +48,47 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
         return MESSAGE_SIZE;
 }
 
-static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
+#define CHUNK 16 
+static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
-    char* kernel_buffer;
-    long ret = 0;
+    char *kernel_buffer;
+    ssize_t ret = 0;
     loff_t pos = 0;
-
-    kernel_buffer = kmalloc(len + 1, GFP_KERNEL);
-    if (!kernel_buffer)
-    {
-        printk(KERN_ERR "loop: Failed to allocate memory\n");
-        return -ENOMEM;
-    }
-
-    if (copy_from_user(kernel_buffer, buffer, len))
-    {
-        printk(KERN_ERR "loop: Failed to copy data from user\n");
-        ret = -EFAULT;
-        goto out;
-    }
-
-    long padded_len = len;
-    if (len % 2 != 0)
-    {
-        kernel_buffer[len] = 0x00;
-        padded_len++;
-    }
-
-     // Open output file in write mode (create it if it doesn't exist)
-    if (!output_file) {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
-        if (IS_ERR(output_file)) {
-            printk(KERN_ERR "loop: Failed to open file\n");
-            ret = PTR_ERR(output_file);
-            output_file = NULL;
+    struct file *out_file;
+    char hex_buffer[128]; 
+    size_t i, j;
+    
+    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0777);
+    if (IS_ERR(out_file))
+        return PTR_ERR(out_file);
+    
+    for (i = 0; i < u_len; i += CHUNK) {
+        size_t chunk = (u_len - i) < CHUNK ? (u_len - i) : CHUNK;
+        
+        char temp[CHUNK];
+        if (copy_from_user(temp, buffer + i, chunk)) {
+            ret = -EFAULT;
             goto out;
         }
-    }
-    // Prepare hex formatting and write to the output file
-    long i = 0;
-    char hex_buffer[80];
-    while (i < padded_len)
-    {
-        long line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
-	
-       // long offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (long)i);
-       //long offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%32x ", (long)i); //mec arjeqa
-        long offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%32lx ", (long)i); //mec arjeqa
-   
-       long int j = 0; 	
-        while( j < line_len)
-        {
-            if (j + 1 < line_len)
-            {
-                //offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x%02x", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%32lx%32lx", (long)kernel_buffer[i + j + 1],(long)kernel_buffer[i + j]);
-                if (j + 2 < line_len)
-                    offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, " ");
-            }
-            else
-                //offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%32lx", (long)kernel_buffer[i + j]);
-       	 j += 2; 
-	}
-        // Fill spaces until the required column width is reached as hexdump does
-        while (offset_chars < ROW_SPACE_HEX)
-            hex_buffer[offset_chars++] = ' ';
-        hex_buffer[offset_chars] = '\n';
-        hex_buffer[offset_chars + 1] = '\0';
-        ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
-        if (ret < 0)
-        {
-            printk(KERN_ERR "loop: Failed to write in file\n");
+        
+        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07zx: ", i);
+        for (j = 0; j < chunk; j++) {
+            offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x ", (unsigned char)temp[j]);
+        }
+        snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "\n");
+        
+        if (kernel_write(out_file, hex_buffer, strlen(hex_buffer), &pos) < 0) {
+            ret = -EIO;
             goto out;
         }
-        i += 16;
+        ret += chunk;
     }
-    //snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len);
-    snprintf(hex_buffer, sizeof(hex_buffer), "%32lx\n", (long)len);
-    kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
-    ret = len;
+
 out:
-    kfree(kernel_buffer);
+    filp_close(out_file, NULL);
     return ret;
 }
+
 
 // module loading
 static int __init loop_init(void)
