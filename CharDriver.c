@@ -126,7 +126,7 @@ static ssize_t loop_write(struct file *file, const char __user *user_buffer, siz
 
     // Ensure that data is immediately written to disk
     if (output_file) {
-        filp_flush(output_file, 1);
+        vfs_fsync(output_file, 1);
     }
 
     pr_info("loop: data written to /tmp/output\n");
