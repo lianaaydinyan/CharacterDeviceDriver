@@ -48,50 +48,65 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
         return MESSAGE_SIZE;
 }
 #define CHUNK 16 
+
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
-    ssize_t ret = 0;
+    ssize_t total = 0;
     loff_t pos = 0;
     struct file *out_file;
-    char hex_buffer[128]; 
-    size_t i, j;
-    
-    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0777);
-    if (IS_ERR(out_file))
+    char local_buf[CHUNK];
+    char hex_line[128];
+    size_t i, chunk;
+    int n;
+
+    /* Open output file in append mode */
+    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (IS_ERR(out_file)) {
+        printk(KERN_ERR "loop: Failed to open output file\n");
         return PTR_ERR(out_file);
-    
+    }
+
     for (i = 0; i < u_len; i += CHUNK) {
-        size_t chunk = ((u_len - i) < CHUNK) ? (u_len - i) : CHUNK;
+        chunk = min(u_len - i, (size_t)CHUNK);
         
-        char temp[CHUNK];
-        /* copy_from_user() returns the number of bytes that could not be copied.
-           We consider it an error if this is nonzero */
-        if (copy_from_user(temp, buffer + i, chunk) != 0) {
-            ret = -EFAULT;
+        /* Copy a chunk from user space into a small local buffer */
+        if (copy_from_user(local_buf, buffer + i, chunk) != 0) {
+            printk(KERN_ERR "loop: copy_from_user failed at offset %zu\n", i);
+            total = -EFAULT;
             goto out;
         }
         
-        /* Create a hex dump line.
-         * Example output: "0000000a: 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50\n"
-         */
-        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07zx: ", i);
-        for (j = 0; j < chunk; j++) {
-            offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x ", (unsigned char)temp[j]);
-        }
-        snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "\n");
-        
-        if (kernel_write(out_file, hex_buffer, strlen(hex_buffer), &pos) < 0) {
-            ret = -EIO;
+        /* Create a hex dump line. Format: "0000000: 41 42 43 ...\n" */
+        n = snprintf(hex_line, sizeof(hex_line), "%07zx: ", i);
+        if (n < 0 || n >= sizeof(hex_line)) {
+            printk(KERN_ERR "loop: snprintf error for offset formatting\n");
+            total = -EFAULT;
             goto out;
         }
-        ret += chunk;
+        
+        for (size_t j = 0; j < chunk; j++) {
+            n += snprintf(hex_line + n, sizeof(hex_line) - n, "%02x ", (unsigned char)local_buf[j]);
+            if (n < 0 || n >= sizeof(hex_line)) {
+                printk(KERN_ERR "loop: snprintf error in hex conversion\n");
+                total = -EFAULT;
+                goto out;
+            }
+        }
+        n += snprintf(hex_line + n, sizeof(hex_line) - n, "\n");
+        
+        /* Write the hex line to the output file */
+        if (kernel_write(out_file, hex_line, n, &pos) < 0) {
+            printk(KERN_ERR "loop: kernel_write failed at pos %lld\n", pos);
+            total = -EIO;
+            goto out;
+        }
+        total += chunk;
     }
 
 out:
     filp_close(out_file, NULL);
-    return ret;
+    return total;
 }
-
 // module loading
 static int __init loop_init(void)
 {
