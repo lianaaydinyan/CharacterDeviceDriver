@@ -50,16 +50,16 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
 
 
 #define CHUNK 16
+#define CHUNK 16
 
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
-    ssize_t total = 0;
-    struct file *out_file;
+    ssize_t total = 0, written;
     char *local_buf, *hex_line;
-    loff_t pos;
+    loff_t pos = *offset;
     int n;
 
-    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0777);
+    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0666);
     if (IS_ERR(out_file)) {
         printk(KERN_ERR "loop: Failed to open output file, error: %ld\n", PTR_ERR(out_file));
         return PTR_ERR(out_file);
@@ -78,31 +78,32 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
         goto out_free;
     }
 
-    hex_line = kmalloc(5 * CHUNK + 20, GFP_KERNEL);
+    hex_line = kmalloc(80, GFP_KERNEL);
     if (!hex_line) {
         printk(KERN_ERR "loop: Failed to allocate memory for hex output\n");
         total = -ENOMEM;
         goto out_free;
     }
 
-    pos = *offset; // Use *offset instead of file->f_pos
     for (size_t i = 0; i < u_len; i += CHUNK) {
         int line_len = (i + CHUNK <= u_len) ? CHUNK : (u_len - i);
-        n = snprintf(hex_line, 20, "%07zx: ", (size_t)(pos + i));
+        n = snprintf(hex_line, 80, "%07zx: ", (size_t)(pos + i));
 
         for (int j = 0; j < line_len; j++)
             n += snprintf(hex_line + n, 4, "%02x ", (unsigned char)local_buf[i + j]);
 
         snprintf(hex_line + n, 2, "\n");
 
-        if (kernel_write(out_file, hex_line, strlen(hex_line), &pos) < 0) {
-            printk(KERN_ERR "loop: kernel_write failed at file offset %lld\n", pos);
+        // Make sure the full line is written
+        written = kernel_write(out_file, hex_line, n + 1, &pos);
+        if (written < 0) {
+            printk(KERN_ERR "loop: kernel_write failed at offset %lld\n", pos);
             total = -EIO;
             goto out_free_hex;
         }
     }
 
-    *offset = pos; // Update file offset
+    *offset = pos; // Correctly update offset after writing
     total = u_len;
 
 out_free_hex:
