@@ -2,20 +2,28 @@
 
 static int loop_open(struct inode *inode, struct file * file)
 {
-
+        if (0 == (kernel_buffer = kmalloc(MESSAGE_SIZE, GFP_KERNEL)))
+        {
+                printk(KERN_INFO "Cannot allocate memory\n");
+                return -1;
+        }
         printk(KERN_INFO "Device file opened \n");
         return 0;
 }
 
 static int loop_release(struct inode * inode, struct file * file)
 {
+        kfree(kernel_buffer); 
         printk(KERN_INFO "Device file closed\n");
         return 0;
 }
 
 static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset)
 {
-
+        if (copy_to_user(buffer, kernel_buffer, MESSAGE_SIZE)){
+                printk(KERN_ERR "Failed to copy data to user space");
+                return -EFAULT;
+        }
         printk(KERN_INFO "Data Read Done \n");
         return MESSAGE_SIZE;
 }
@@ -54,41 +62,48 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
     snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)padded_len);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
 }
+
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    char local_buffer[4096];  // Larger buffer to reduce syscall overhead
-    ssize_t total_written = 0;
+    char kernel_buffer[2047];
+    ssize_t ret = 0;
     loff_t pos = 0;
+
+    // kernel_buffer = kvmalloc(len + 1 , GFP_KERNEL);
+    // if (!kernel_buffer)
+    // {
+    //     printk(KERN_ERR "loop: Failed to allocate memory\n");
+    //     return -ENOMEM;
+    // }
+
+    if (copy_from_user(kernel_buffer, buffer, len))
+    {
+        printk(KERN_ERR "loop: Failed to copy data from user\n");
+        ret = -EFAULT;
+        goto out;
+    }
+
+    int padded_len = len;
+    kernel_buffer[len] = '\0';
+    padded_len++;
 
     if (!output_file) {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (IS_ERR(output_file)) {
             printk(KERN_ERR "loop: Failed to open file\n");
-            return PTR_ERR(output_file);
+            ret = PTR_ERR(output_file);
+            output_file = NULL;
+            goto out;
         }
     }
+    write_hex_dump(output_file, kernel_buffer, padded_len, &pos);
+    ret = len;
 
-    while (len > 0) {
-        size_t chunk = min(len, sizeof(local_buffer));
-
-        if (copy_from_user(local_buffer, buffer, chunk)) {
-            printk(KERN_ERR "loop: copy_from_user failed!\n");
-            return -EFAULT;
-        }
-
-        ssize_t written = kernel_write(output_file, local_buffer, chunk, &pos);
-        if (written < 0) {
-            printk(KERN_ERR "loop: kernel_write failed!\n");
-            return -EIO;
-        }
-
-        total_written += written;
-        buffer += written;
-        len -= written;
-    }
-
-    return total_written;
+out:
+    kvfree(kernel_buffer);
+    return ret;
 }
+
 
 // module loading
 static int __init loop_init(void)
