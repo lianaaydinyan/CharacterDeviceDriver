@@ -1,123 +1,122 @@
 #include "header.h"
 
-// static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
-// {
-//     char *kernel_buffer;
-//     size_t length;
-//     ssize_t ret;
-
-//     /* Allocate kernel memory for u_len + 1 bytes */
-//     kernel_buffer = kvmalloc(u_len + 1, GFP_KERNEL);
-//     if (!kernel_buffer)
-//         return -ENOMEM;
-    
-//     /* Calculate how many bytes we can write (assuming BUFFER_SIZE is defined) */
-//     length = BUFFER_SIZE - (*offset);
-//     if (length > u_len)
-//         length = u_len;
-    
-//     /* Copy from user; copy_from_user returns nonzero if any bytes could not be copied */
-//     if (copy_from_user(kernel_buffer + *offset, buffer, length) != 0) {
-//         kvfree(kernel_buffer);
-//         return -EFAULT;
-//     }
-    
-//     printk(KERN_INFO "[*] %s: Device has been written\n", DEVICE_NAME);
-//     *offset += length;
-//     ret = length;
-    
-//     kvfree(kernel_buffer);
-//     return ret;
-// }
-
-static int loop_open(struct inode *inode, struct file * file)
+// Open device
+static int loop_open(struct inode *inode, struct file *file)
 {
-        printk(KERN_INFO "Device file opened \n");
-        return 0;
-}
-
-static int loop_release(struct inode * inode, struct file * file)
-{
-        printk(KERN_INFO "Device file closed\n");
-        return 0;
-}
-
-static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset)
-{
-        printk(KERN_INFO "Data Read Done \n");
-        return MESSAGE_SIZE;
-}
-
-
-#define CHUNK 16
-
-
-static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
-{
-    ssize_t total = 0, written;
-    char *local_buf, *hex_line;
-    loff_t pos;
-    int n;
-
-    if (!output_file || IS_ERR(output_file)) {
-        printk(KERN_ERR "loop: File is NULL or invalid\n");
-        return -EIO;
+    kernel_buffer = kmalloc(MESSAGE_SIZE, GFP_KERNEL);
+    if (!kernel_buffer)
+    {
+        printk(KERN_ERR "loop: Cannot allocate memory\n");
+        return -ENOMEM;
     }
+    printk(KERN_INFO "loop: Device file opened\n");
+    return 0;
+}
 
-    local_buf = kmalloc(u_len, GFP_KERNEL);
-    if (!local_buf) return -ENOMEM;
+// Close device
+static int loop_release(struct inode *inode, struct file *file)
+{
+    kfree(kernel_buffer);
+    printk(KERN_INFO "loop: Device file closed\n");
+    return 0;
+}
 
-    if (copy_from_user(local_buf, buffer, u_len)) {
-        kfree(local_buf);
+// Read data
+static ssize_t loop_read(struct file *filep, char __user *buffer, size_t len, loff_t *offset)
+{
+    if (copy_to_user(buffer, kernel_buffer, MESSAGE_SIZE))
+    {
+        printk(KERN_ERR "loop: Failed to copy data to user space\n");
         return -EFAULT;
     }
+    printk(KERN_INFO "loop: Data read done\n");
+    return MESSAGE_SIZE;
+}
 
-    hex_line = kmalloc(48, GFP_KERNEL); 
-    if (!hex_line) {
-        kfree(local_buf);
+static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
+{
+    ssize_t ret = 0;
+    loff_t pos;
+    size_t i;
+    char hex_buffer[48];
+
+    kernel_buffer = kmalloc(len, GFP_KERNEL);
+    if (!kernel_buffer)
+    {
+        printk(KERN_ERR "loop: Failed to allocate memory\n");
         return -ENOMEM;
     }
 
-    pos = output_file->f_pos;
+    if (copy_from_user(kernel_buffer, buffer, len))
+    {
+        printk(KERN_ERR "loop: Failed to copy data from user\n");
+        ret = -EFAULT;
+        goto out;
+    }
 
-    for (size_t i = 0; i < u_len; i += CHUNK) {
-        int line_len = (i + CHUNK <= u_len) ? CHUNK : (u_len - i);
-        n = snprintf(hex_line, 48, "%07zx: ", (size_t)(pos + i));
+    if (!output_file)
+    {
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0666);
+        if (IS_ERR(output_file))
+        {
+            printk(KERN_ERR "loop: Failed to open file\n");
+            ret = PTR_ERR(output_file);
+            output_file = NULL;
+            goto out;
+        }
+    }
+
+    // Write hex dump
+    pos = output_file->f_pos;
+    for (i = 0; i < len; i += 16)
+    {
+        int line_len = (len - i >= 16) ? 16 : (len - i);
+        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%08x  ", (unsigned int)i);
+
+        for (int j = 0; j < 16; j++)
+        {
+            if (j < line_len)
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x ", kernel_buffer[i + j]);
+            else
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "   ");
+        }
+
+        offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, " |");
 
         for (int j = 0; j < line_len; j++)
-            n += snprintf(hex_line + n, 4, "%02x ", (unsigned char)local_buf[i + j]);
+        {
+            char c = kernel_buffer[i + j];
+            hex_buffer[offset_chars++] = (c >= 32 && c <= 126) ? c : '.';
+        }
 
-        hex_line[n - 1] = '\n'; // Replace last space with newline
+        snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "|\n");
 
-        written = kernel_write(output_file, hex_line, n, &pos);
-        if (written < 0) {
-            printk(KERN_ERR "loop: kernel_write failed at offset %lld\n", pos);
-            total = -EIO;
-            break;
+        ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+        if (ret < 0)
+        {
+            printk(KERN_ERR "loop: Failed to write in file\n");
+            goto out;
         }
     }
 
     output_file->f_pos = pos;
-    *offset = pos;
-    total = u_len;
+    ret = len;
 
-    kfree(hex_line);
-    kfree(local_buf);
-    return total;
+out:
+    kfree(kernel_buffer);
+    return ret;
 }
 
-
-// module loading
+// Module loading
 static int __init loop_init(void)
 {
-    // Register the character device
     major_number = register_chrdev(0, DEVICE_NAME, &fops);
     if (major_number < 0)
     {
-        printk(KERN_ERR "loop: Failed to register a major number\n");
+        printk(KERN_ERR "loop: Failed to register major number\n");
         return major_number;
     }
-    // Create the device class
+
     loop_class = class_create(THIS_MODULE, DEVICE_NAME);
     if (IS_ERR(loop_class))
     {
@@ -125,7 +124,7 @@ static int __init loop_init(void)
         printk(KERN_ERR "loop: Failed to register device class\n");
         return PTR_ERR(loop_class);
     }
-     // Create the device node in /dev
+
     loop_device = device_create(loop_class, NULL, MKDEV(major_number, 0), NULL, DEVICE_NAME);
     if (IS_ERR(loop_device))
     {
@@ -134,20 +133,19 @@ static int __init loop_init(void)
         printk(KERN_ERR "loop: Failed to create the device\n");
         return PTR_ERR(loop_device);
     }
-    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0777);
-    if (IS_ERR(output_file)) {
-        printk(KERN_ERR "loop: Failed to open output file, error: %ld\n", PTR_ERR(output_file));
-        return PTR_ERR(output_file);
-    }
+
     printk(KERN_INFO "loop: Device initialized successfully\n");
     return 0;
 }
 
-//moduel unloading
+// Module unloading
 static void __exit loop_exit(void)
 {
     if (output_file)
+    {
+        vfs_fsync(output_file, 0);
         filp_close(output_file, NULL);
+    }
     device_destroy(loop_class, MKDEV(major_number, 0));
     class_unregister(loop_class);
     class_destroy(loop_class);
