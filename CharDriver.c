@@ -64,37 +64,68 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
 }
 
 
+// static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
+// {
+//     char *kernel_buffer;
+//     size_t length;
+//     ssize_t ret;
+
+//     /* Allocate kernel memory for u_len + 1 bytes */
+//     kernel_buffer = kvmalloc(u_len + 1, GFP_KERNEL);
+//     if (!kernel_buffer)
+//         return -ENOMEM;
+    
+//     /* Calculate how many bytes we can write (assuming BUFFER_SIZE is defined) */
+//     length = BUFFER_SIZE - (*offset);
+//     if (length > u_len)
+//         length = u_len;
+    
+//     /* Copy from user; copy_from_user returns nonzero if any bytes could not be copied */
+//     if (copy_from_user(kernel_buffer + *offset, buffer, length) != 0) {
+//         kvfree(kernel_buffer);
+//         return -EFAULT;
+//     }
+    
+//     printk(KERN_INFO "[*] %s: Device has been written\n", DEVICE_NAME);
+//     *offset += length;
+//     ret = length;
+    
+//     kvfree(kernel_buffer);
+//     return ret;
+// }
+
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
     char *kernel_buffer;
-    size_t length;
     ssize_t ret;
 
-    /* Allocate kernel memory for u_len + 1 bytes */
+    /* Allocate kernel memory for u_len + 1 bytes (for null-termination) */
     kernel_buffer = kvmalloc(u_len + 1, GFP_KERNEL);
-    if (!kernel_buffer)
+    if (!kernel_buffer) {
+        printk(KERN_ERR "loop_write: Failed to allocate memory\n");
         return -ENOMEM;
-    
-    /* Calculate how many bytes we can write (assuming BUFFER_SIZE is defined) */
-    length = BUFFER_SIZE - (*offset);
-    if (length > u_len)
-        length = u_len;
-    
+    }
+
+    /* Null-terminate the buffer */
+    kernel_buffer[u_len] = 0x00;
+
     /* Copy from user; copy_from_user returns nonzero if any bytes could not be copied */
-    if (copy_from_user(kernel_buffer + *offset, buffer, length) != 0) {
+    if (copy_from_user(kernel_buffer, buffer, u_len) != 0) {
         kvfree(kernel_buffer);
+        printk(KERN_ERR "loop_write: Failed to copy data from user\n");
         return -EFAULT;
     }
-    
+
     printk(KERN_INFO "[*] %s: Device has been written\n", DEVICE_NAME);
-    *offset += length;
-    ret = length;
-    
+
+    /* Set the return value as the number of bytes written */
+    ret = u_len;
+
+    /* Free the allocated memory */
     kvfree(kernel_buffer);
+    
     return ret;
 }
-
-
 
 
 // module loading
