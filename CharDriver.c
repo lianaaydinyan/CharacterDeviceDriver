@@ -10,8 +10,8 @@
 #include <linux/fcntl.h>
 #include <linux/file.h>
 
-#define DEVICE_NAME "loop"
-#define CLASS_NAME "loop_class"
+#define DEVICE_NAME "liana"
+#define CLASS_NAME "liana"
 #define OUTPUT_FILE "/tmp/output"
 #define BUFFER_SIZE_INCREMENT (1024 * 1024)  // 1MB increments for buffer growth
 #define HEX_DUMP_LINE_LENGTH 16
@@ -201,5 +201,5 @@ module_init(loop_init);
 module_exit(loop_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Your Name");
+MODULE_AUTHOR("liaydiny");
 MODULE_DESCRIPTION("A professional Linux loopback device driver that handles large files and writes hex output");
