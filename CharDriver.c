@@ -66,8 +66,8 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
 
 static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
 {
-    char kernel_buffer[WRITE_BUFFER_SIZE];  // Fixed-size buffer on the stack
-    size_t bytes_written = 0;               // Keep track of total bytes written
+    char kernel_buffer[WRITE_BUFFER_SIZE];  // Fixed-size kernel buffer
+    size_t bytes_written = 0;               // Track total bytes written
     ssize_t ret = 0;                        // Return value
     loff_t pos = 0;                         // File position
 
@@ -79,6 +79,7 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
         }
     }
 
+    // Write data in chunks
     while (len > 0) {
         size_t chunk_size = (len > WRITE_BUFFER_SIZE) ? WRITE_BUFFER_SIZE : len;
 
@@ -88,17 +89,22 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
             return -EFAULT;
         }
 
-        // Process the chunk (e.g., write hex dump to file)
-        write_hex_dump(output_file, kernel_buffer, chunk_size, &pos);
+        // Write the chunk directly to the file
+        ret = kernel_write(output_file, kernel_buffer, chunk_size, &pos);
+        if (ret < 0) {
+            printk(KERN_ERR "loop: Failed to write to file\n");
+            break;
+        }
 
-        bytes_written += chunk_size;  // Update bytes_written to track progress
-        len -= chunk_size;            // Decrement the remaining bytes to be written
+        bytes_written += chunk_size;  // Update the total bytes written
+        len -= chunk_size;            // Decrease the remaining bytes to be written
 
         printk(KERN_INFO "loop: Wrote %zu bytes, %zu bytes remaining\n", chunk_size, len);
     }
 
-    ret = bytes_written;  // Return total bytes written
-    return ret;           // Return success or total bytes written
+    printk(KERN_INFO "loop: Total bytes written: %zu\n", bytes_written);
+
+    return bytes_written;
 }
 
 // module loading
