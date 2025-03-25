@@ -15,7 +15,7 @@
 // # define OUTPUT_FILE_PATH "/tmp/output"
 # define BUFFER_SIZE 65536 // for 1G
 # define MESSAGE_SIZE 1024
-# define ROW_SPACE_HEX 48
+# define ROW_SPACE_HEX 47
 
 #define WRITE_BUFFER_SIZE 4096
 struct file             *output_file;
