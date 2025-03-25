@@ -48,14 +48,12 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
         return MESSAGE_SIZE;
 }
 #define CHUNK 16
-
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
     ssize_t total = 0;
     struct file *out_file;
-    char local_buf[CHUNK];
-    char hex_line[128];
-    size_t i, chunk;
+    char *local_buf;
+    char *hex_line;
     int n;
 
     out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND, 0777);
@@ -64,41 +62,50 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
         return PTR_ERR(out_file);
     }
 
-    for (i = 0; i < u_len; i += CHUNK) {
-        chunk = min(u_len - i, (size_t)CHUNK);
-
-        if (copy_from_user(local_buf, buffer + i, chunk) != 0) {
-            printk(KERN_ERR "loop: copy_from_user failed at offset %zu\n", i);
-            total = -EFAULT;
-            goto out;
-        }
-
-        n = snprintf(hex_line, sizeof(hex_line), "%07zx: ", i);
-        if (n < 0 || n >= sizeof(hex_line)) {
-            printk(KERN_ERR "loop: snprintf error for offset %zu\n", i);
-            total = -EFAULT;
-            goto out;
-        }
-
-        for (size_t j = 0; j < chunk; j++) {
-            n += snprintf(hex_line + n, sizeof(hex_line) - n, "%02x ", (unsigned char)local_buf[j]);
-            if (n < 0 || n >= sizeof(hex_line)) {
-                printk(KERN_ERR "loop: snprintf error during hex conversion at offset %zu\n", i);
-                total = -EFAULT;
-                goto out;
-            }
-        }
-        n += snprintf(hex_line + n, sizeof(hex_line) - n, "\n");
-
-        if (kernel_write(out_file, hex_line, n, &out_file->f_pos) < 0) {
-            printk(KERN_ERR "loop: kernel_write failed at file offset %lld\n", out_file->f_pos);
-            total = -EIO;
-            goto out;
-        }
-        total += chunk;
+    // Allocate memory for the buffer dynamically (to handle large writes)
+    local_buf = kmalloc(u_len, GFP_KERNEL);
+    if (!local_buf) {
+        printk(KERN_ERR "loop: Failed to allocate memory\n");
+        total = -ENOMEM;
+        goto out_close;
     }
 
-out:
+    // Copy data from user-space in one go
+    if (copy_from_user(local_buf, buffer, u_len)) {
+        printk(KERN_ERR "loop: copy_from_user failed\n");
+        total = -EFAULT;
+        goto out_free;
+    }
+
+    // Allocate memory for hex_line output
+    hex_line = kmalloc(3 * u_len + 20, GFP_KERNEL);  // Each byte needs 3 chars (XX ), plus offset info
+    if (!hex_line) {
+        printk(KERN_ERR "loop: Failed to allocate memory for hex output\n");
+        total = -ENOMEM;
+        goto out_free;
+    }
+
+    // Convert to hexdump format
+    n = snprintf(hex_line, 20, "%07zx: ", (size_t)*offset);
+    for (size_t j = 0; j < u_len; j++)
+        n += snprintf(hex_line + n, 3, "%02x ", (unsigned char)local_buf[j]);
+    snprintf(hex_line + n, 2, "\n");
+
+    // Write the hex dump to file
+    if (kernel_write(out_file, hex_line, strlen(hex_line), &out_file->f_pos) < 0) {
+        printk(KERN_ERR "loop: kernel_write failed at file offset %lld\n", out_file->f_pos);
+        total = -EIO;
+        goto out_free_hex;
+    }
+
+    total = u_len; // Successfully processed all bytes
+    *offset += u_len;
+
+out_free_hex:
+    kfree(hex_line);
+out_free:
+    kfree(local_buf);
+out_close:
     filp_close(out_file, NULL);
     return total;
 }
