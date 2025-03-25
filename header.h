@@ -17,6 +17,7 @@
 # define MESSAGE_SIZE 1024
 # define ROW_SPACE_HEX 47
 
+#define WRITE_BUFFER_SIZE 4096
 struct file             *output_file;
 dev_t                   dev_fd = 0;
 uint8_t *               kernel_buffer; 

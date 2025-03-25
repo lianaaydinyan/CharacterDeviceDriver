@@ -65,7 +65,7 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
 
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    char kernel_buffer[2047];
+    char kernel_buffer[WRITE_BUFFER_SIZE];
     ssize_t ret = 0;
     loff_t pos = 0;
 
@@ -76,16 +76,31 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     //     return -ENOMEM;
     // }
 
-    if (copy_from_user(kernel_buffer, buffer, len))
-    {
-        printk(KERN_ERR "loop: Failed to copy data from user\n");
-        ret = -EFAULT;
-        goto out;
-    }
+    // if (copy_from_user(kernel_buffer, buffer, len))
+    // {
+    //     printk(KERN_ERR "loop: Failed to copy data from user\n");
+    //     ret = -EFAULT;
+    //     goto out;
+    // }
 
-    int padded_len = len;
-    kernel_buffer[len] = '\0';
-    padded_len++;
+    // int padded_len = len;
+    // kernel_buffer[len] = '\0';
+    // padded_len++;
+    while (len > 0) {
+        size_t chunk_size = (len > WRITE_BUFFER_SIZE) ? WRITE_BUFFER_SIZE : len;
+
+        // Copy chunk from user space to kernel space
+        if (copy_from_user(kernel_buffer, buffer + bytes_written, chunk_size)) {
+            printk(KERN_ERR "loop: Failed to copy data from user\n");
+            return -EFAULT;
+        }
+
+        // Process the chunk (hex dump or save to a file)
+        printk(KERN_INFO "loop: Writing %zu bytes to device\n", chunk_size);
+
+        bytes_written += chunk_size;
+        len -= chunk_size;
+    }
 
     if (!output_file) {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
@@ -100,7 +115,6 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     ret = len;
 
 out:
-    kvfree(kernel_buffer);
     return ret;
 }
 
