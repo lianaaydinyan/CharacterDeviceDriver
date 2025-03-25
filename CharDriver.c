@@ -50,7 +50,6 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
 
 
 #define CHUNK 16
-#define CHUNK 16
 
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
@@ -59,10 +58,10 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
     loff_t pos = *offset;
     int n;
 
-    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0666);
-    if (IS_ERR(out_file)) {
-        printk(KERN_ERR "loop: Failed to open output file, error: %ld\n", PTR_ERR(out_file));
-        return PTR_ERR(out_file);
+    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0666);
+    if (IS_ERR(output_file)) {
+        printk(KERN_ERR "loop: Failed to open output file, error: %ld\n", PTR_ERR(output_file));
+        return PTR_ERR(output_file);
     }
 
     local_buf = kmalloc(u_len, GFP_KERNEL);
@@ -95,7 +94,7 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
         snprintf(hex_line + n, 2, "\n");
 
         // Make sure the full line is written
-        written = kernel_write(out_file, hex_line, n + 1, &pos);
+        written = kernel_write(output_file, hex_line, n + 1, &pos);
         if (written < 0) {
             printk(KERN_ERR "loop: kernel_write failed at offset %lld\n", pos);
             total = -EIO;
@@ -111,7 +110,7 @@ out_free_hex:
 out_free:
     kfree(local_buf);
 out_close:
-    filp_close(out_file, NULL);
+    filp_close(output_file, NULL);
     return total;
 }
 
