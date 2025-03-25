@@ -47,17 +47,19 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
         printk(KERN_INFO "Data Read Done \n");
         return MESSAGE_SIZE;
 }
+
+
 #define CHUNK 16
+
 static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
     ssize_t total = 0;
     struct file *out_file;
-    char *local_buf;
-    char *hex_line;
+    char *local_buf, *hex_line;
     loff_t pos;
     int n;
 
-    out_file = filp_open("/var/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0777);
+    out_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0777);
     if (IS_ERR(out_file)) {
         printk(KERN_ERR "loop: Failed to open output file, error: %ld\n", PTR_ERR(out_file));
         return PTR_ERR(out_file);
@@ -76,28 +78,32 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
         goto out_free;
     }
 
-    hex_line = kmalloc(3 * u_len + 20, GFP_KERNEL);
+    hex_line = kmalloc(5 * CHUNK + 20, GFP_KERNEL);
     if (!hex_line) {
         printk(KERN_ERR "loop: Failed to allocate memory for hex output\n");
         total = -ENOMEM;
         goto out_free;
     }
 
-    n = snprintf(hex_line, 20, "%07zx: ", (size_t)*offset);
-    for (size_t j = 0; j < u_len; j++)
-        n += snprintf(hex_line + n, 3, "%02x ", (unsigned char)local_buf[j]);
-    snprintf(hex_line + n, 2, "\n");
+    pos = *offset; // Use *offset instead of file->f_pos
+    for (size_t i = 0; i < u_len; i += CHUNK) {
+        int line_len = (i + CHUNK <= u_len) ? CHUNK : (u_len - i);
+        n = snprintf(hex_line, 20, "%07zx: ", (size_t)(pos + i));
 
-    pos = out_file->f_pos;
-    if (kernel_write(out_file, hex_line, strlen(hex_line), &pos) < 0) {
-        printk(KERN_ERR "loop: kernel_write failed at file offset %lld\n", out_file->f_pos);
-        total = -EIO;
-        goto out_free_hex;
+        for (int j = 0; j < line_len; j++)
+            n += snprintf(hex_line + n, 4, "%02x ", (unsigned char)local_buf[i + j]);
+
+        snprintf(hex_line + n, 2, "\n");
+
+        if (kernel_write(out_file, hex_line, strlen(hex_line), &pos) < 0) {
+            printk(KERN_ERR "loop: kernel_write failed at file offset %lld\n", pos);
+            total = -EIO;
+            goto out_free_hex;
+        }
     }
 
-    out_file->f_pos = pos;
+    *offset = pos; // Update file offset
     total = u_len;
-    *offset += u_len;
 
 out_free_hex:
     kfree(hex_line);
@@ -107,6 +113,7 @@ out_close:
     filp_close(out_file, NULL);
     return total;
 }
+
 
 // module loading
 static int __init loop_init(void)
