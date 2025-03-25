@@ -63,12 +63,13 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
 }
 
+
 static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
 {
-    char kernel_buffer[WRITE_BUFFER_SIZE];  // Fixed-size buffer on stack
-    size_t bytes_written = 0;               // Keep track of how many bytes were written
-    ssize_t ret = 0;
-    loff_t pos = 0;
+    char kernel_buffer[WRITE_BUFFER_SIZE];  // Fixed-size buffer on the stack
+    size_t bytes_written = 0;               // Keep track of total bytes written
+    ssize_t ret = 0;                        // Return value
+    loff_t pos = 0;                         // File position
 
     if (!output_file) {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
@@ -87,16 +88,17 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
             return -EFAULT;
         }
 
-        // Process and write this chunk of data (e.g., hex dump)
-        printk(KERN_INFO "loop: Writing %zu bytes to device\n", chunk_size);
+        // Process the chunk (e.g., write hex dump to file)
         write_hex_dump(output_file, kernel_buffer, chunk_size, &pos);
 
-        bytes_written += chunk_size;  // Update how many bytes we've written so far
-        len -= chunk_size;            // Decrement the remaining length to be written
+        bytes_written += chunk_size;  // Update bytes_written to track progress
+        len -= chunk_size;            // Decrement the remaining bytes to be written
+
+        printk(KERN_INFO "loop: Wrote %zu bytes, %zu bytes remaining\n", chunk_size, len);
     }
 
-    ret = bytes_written;  // Return total bytes successfully written
-    return ret;
+    ret = bytes_written;  // Return total bytes written
+    return ret;           // Return success or total bytes written
 }
 
 // module loading
