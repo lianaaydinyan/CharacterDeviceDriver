@@ -63,29 +63,21 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
 }
 
-static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
+static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
 {
-    char kernel_buffer[WRITE_BUFFER_SIZE];
+    char kernel_buffer[WRITE_BUFFER_SIZE];  // Fixed-size buffer on stack
+    size_t bytes_written = 0;               // Keep track of how many bytes were written
     ssize_t ret = 0;
     loff_t pos = 0;
 
-    // kernel_buffer = kvmalloc(len + 1 , GFP_KERNEL);
-    // if (!kernel_buffer)
-    // {
-    //     printk(KERN_ERR "loop: Failed to allocate memory\n");
-    //     return -ENOMEM;
-    // }
+    if (!output_file) {
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        if (IS_ERR(output_file)) {
+            printk(KERN_ERR "loop: Failed to open file\n");
+            return PTR_ERR(output_file);
+        }
+    }
 
-    // if (copy_from_user(kernel_buffer, buffer, len))
-    // {
-    //     printk(KERN_ERR "loop: Failed to copy data from user\n");
-    //     ret = -EFAULT;
-    //     goto out;
-    // }
-
-    // int padded_len = len;
-    // kernel_buffer[len] = '\0';
-    // padded_len++;
     while (len > 0) {
         size_t chunk_size = (len > WRITE_BUFFER_SIZE) ? WRITE_BUFFER_SIZE : len;
 
@@ -95,29 +87,17 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
             return -EFAULT;
         }
 
-        // Process the chunk (hex dump or save to a file)
+        // Process and write this chunk of data (e.g., hex dump)
         printk(KERN_INFO "loop: Writing %zu bytes to device\n", chunk_size);
+        write_hex_dump(output_file, kernel_buffer, chunk_size, &pos);
 
-        bytes_written += chunk_size;
-        len -= chunk_size;
+        bytes_written += chunk_size;  // Update how many bytes we've written so far
+        len -= chunk_size;            // Decrement the remaining length to be written
     }
 
-    if (!output_file) {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
-        if (IS_ERR(output_file)) {
-            printk(KERN_ERR "loop: Failed to open file\n");
-            ret = PTR_ERR(output_file);
-            output_file = NULL;
-            goto out;
-        }
-    }
-    write_hex_dump(output_file, kernel_buffer, padded_len, &pos);
-    ret = len;
-
-out:
+    ret = bytes_written;  // Return total bytes successfully written
     return ret;
 }
-
 
 // module loading
 static int __init loop_init(void)
