@@ -58,7 +58,7 @@ static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t 
     loff_t pos = *offset;
     int n;
 
-    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0666);
+    output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0777);
     if (IS_ERR(output_file)) {
         printk(KERN_ERR "loop: Failed to open output file, error: %ld\n", PTR_ERR(output_file));
         return PTR_ERR(output_file);
