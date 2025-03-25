@@ -39,6 +39,7 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
     loff_t pos;
     size_t i;
     char hex_buffer[48];
+    char *kernel_buffer;
 
     kernel_buffer = kmalloc(len, GFP_KERNEL);
     if (!kernel_buffer)
@@ -56,7 +57,7 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
 
     if (!output_file)
     {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0666);
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE, 0777);
         if (IS_ERR(output_file))
         {
             printk(KERN_ERR "loop: Failed to open file\n");
@@ -71,26 +72,32 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
     for (i = 0; i < len; i += 16)
     {
         int line_len = (len - i >= 16) ? 16 : (len - i);
-        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%08x  ", (unsigned int)i);
-
-        for (int j = 0; j < 16; j++)
+        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (unsigned int)i);
+    
+        for (int j = 0; j < line_len; j += 2)
         {
-            if (j < line_len)
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x ", kernel_buffer[i + j]);
+            if (j + 1 < line_len)
+            {
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars,
+                                         "%02x%02x ", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
+            }
             else
-                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "   ");
+            {
+                // If there's an odd byte left, print it correctly
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars,
+                                         "%02x00 ", kernel_buffer[i + j]);
+            }
         }
-
-        offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, " |");
-
-        for (int j = 0; j < line_len; j++)
-        {
-            char c = kernel_buffer[i + j];
-            hex_buffer[offset_chars++] = (c >= 32 && c <= 126) ? c : '.';
-        }
-
-        snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "|\n");
-
+    
+        // Remove trailing space and add newline
+        if (offset_chars > 0 && hex_buffer[offset_chars - 1] == ' ')
+            hex_buffer[offset_chars - 1] = '\n';
+        else
+            hex_buffer[offset_chars++] = '\n';
+    
+        hex_buffer[offset_chars] = '\0';
+    
+        // Write the formatted hex line to file
         ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
         if (ret < 0)
         {
@@ -98,14 +105,23 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
             goto out;
         }
     }
+    
+    // Write final offset at the end
+    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len);
+    kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
 
+    // Update file position
     output_file->f_pos = pos;
-    ret = len;
 
 out:
     kfree(kernel_buffer);
+    if (output_file) {
+        filp_close(output_file, NULL);
+        output_file = NULL;
+    }
     return ret;
 }
+
 
 // Module loading
 static int __init loop_init(void)
