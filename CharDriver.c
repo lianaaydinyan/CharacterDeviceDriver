@@ -63,13 +63,11 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
 }
 
-
 static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
 {
-    char kernel_buffer[WRITE_BUFFER_SIZE];  // Fixed-size kernel buffer
-    size_t bytes_written = 0;               // Track total bytes written
-    ssize_t ret = 0;                        // Return value
-    loff_t pos = 0;                         // File position
+    char kernel_buffer[WRITE_BUFFER_SIZE];
+    ssize_t ret;
+    ssize_t bytes_written = 0;
 
     if (!output_file) {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
@@ -79,17 +77,28 @@ static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t 
         }
     }
 
-        if (copy_from_user(kernel_buffer, buffer, len)) {
-            printk(KERN_ERR "loop: Failed to copy data from user\n");
-            return -EFAULT;
-        }
+    if (len > WRITE_BUFFER_SIZE) {
+        printk(KERN_WARNING "loop: Truncating write size from %zu to %d\n", len, WRITE_BUFFER_SIZE);
+        len = WRITE_BUFFER_SIZE;
+    }
 
-        // Write the chunk directly to the file
-        ret = kernel_write(output_file, kernel_buffer, chunk_size, &pos);
-    printk(KERN_INFO "loop: Total bytes written: %zu\n", bytes_written);
+    if (copy_from_user(kernel_buffer, buffer, len)) {
+        printk(KERN_ERR "loop: Failed to copy data from user\n");
+        return -EFAULT;
+    }
+
+    ret = kernel_write(output_file, kernel_buffer, len, offset);
+    if (ret < 0) {
+        printk(KERN_ERR "loop: Write error: %zd\n", ret);
+        return ret;
+    }
+
+    bytes_written = ret;
+    printk(KERN_INFO "loop: Total bytes written: %zd\n", bytes_written);
 
     return bytes_written;
 }
+
 
 // module loading
 static int __init loop_init(void)
