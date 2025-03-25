@@ -63,41 +63,23 @@ static void write_hex_dump(struct file *output_file, char *kernel_buffer, size_t
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), pos);
 }
 
-static ssize_t loop_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset)
+
+static ssize_t loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset)
 {
-    char kernel_buffer[WRITE_BUFFER_SIZE];
-    ssize_t ret;
-    ssize_t bytes_written = 0;
-
-    if (!output_file) {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
-        if (IS_ERR(output_file)) {
-            printk(KERN_ERR "loop: Failed to open file\n");
-            return PTR_ERR(output_file);
-        }
-    }
-
-    if (len > WRITE_BUFFER_SIZE) {
-        printk(KERN_WARNING "loop: Truncating write size from %zu to %d\n", len, WRITE_BUFFER_SIZE);
-        len = WRITE_BUFFER_SIZE;
-    }
-
-    if (copy_from_user(kernel_buffer, buffer, len)) {
-        printk(KERN_ERR "loop: Failed to copy data from user\n");
+    struct my_device_d *my_device = (struct my_device_d *)pfile->private_data;
+    ssize_t len = BUFFER_SIZE - *offset;
+    if (len <= 0)
+        return 0;
+    if (len >= u_len)
+        len = u_len;
+    memset(my_device->buffer, '\0', BUFFER_SIZE);
+    if (copy_from_user(my_device->buffer + *offset, buffer, len))
         return -EFAULT;
-    }
-
-    ret = kernel_write(output_file, kernel_buffer, len, offset);
-    if (ret < 0) {
-        printk(KERN_ERR "loop: Write error: %zd\n", ret);
-        return ret;
-    }
-
-    bytes_written = ret;
-    printk(KERN_INFO "loop: Total bytes written: %zd\n", bytes_written);
-
-    return bytes_written;
+    printk(KERN_INFO "[*] %s: Device has been written\n", DEVICE_NAME);
+    *offset += len;
+    return len;
 }
+
 
 
 // module loading
