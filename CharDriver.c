@@ -64,7 +64,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     while (i < padded_len)
     {
         int line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
-        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (unsigned int)i);
+        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (unsigned long int)i);
     
         for (int j = 0; j < line_len; j += 2)
         {
