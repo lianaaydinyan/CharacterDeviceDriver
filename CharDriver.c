@@ -39,7 +39,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    usize_t padded_len = len;
+    size_t padded_len = len;
     if (len % 2 != 0)
     {
         kernel_buffer[len] = 0x00;
@@ -91,7 +91,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
         i += 16;
     }
-    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (size_t)len);
+    snprintf(hex_buffer, sizeof(hex_buffer), "%07lx\n", (size_t)len);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
     ret = len;
 out:
