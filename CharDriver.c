@@ -39,7 +39,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    int padded_len = len;
+    unsigned long int padded_len = len;
     if (len % 2 != 0)
     {
         kernel_buffer[len] = 0x00;
@@ -59,7 +59,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
     }
     // Prepare hex formatting and write to the output file
-    unsigned long long int i = 0;
+    unsigned long int i = 0;
     char hex_buffer[80];
     while (i < padded_len)
     {
