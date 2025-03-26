@@ -59,7 +59,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
     }
     // Prepare hex formatting and write to the output file
-    size_t i = 0;
+    unsigned long long int i = 0;
     char hex_buffer[80];
     while (i < padded_len)
     {
