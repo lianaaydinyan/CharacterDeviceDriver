@@ -19,13 +19,13 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
     return MESSAGE_SIZE;
 }
 
-static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
+static ssize_t loop_write(struct file* filep, const char __user* buffer, unsigned long int len, loff_t* offset)
 {
     char* kernel_buffer;
     ssize_t ret = 0;
     loff_t pos = 0;
 
-    kernel_buffer = kvmalloc(len + 1, GFP_KERNEL);
+    kernel_buffer = kmalloc(len + 1, GFP_KERNEL);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
@@ -94,7 +94,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
     ret = len;
 out:
-    kvfree(kernel_buffer);
+    kfree(kernel_buffer);
     return ret;
 }
 
@@ -134,7 +134,7 @@ static void __exit loop_exit(void)
 {
     if (output_file)
         filp_close(output_file, NULL);
-    device_destroy(loop_class, MKDEV(major_number, 0));
+    device_destroy(loop_device, MKDEV(major_number, 0));
     class_unregister(loop_class);
     class_destroy(loop_class);
     unregister_chrdev(major_number, DEVICE_NAME);

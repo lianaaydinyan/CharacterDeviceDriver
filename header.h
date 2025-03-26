@@ -29,7 +29,8 @@ static int              loop_release(struct inode* inodep, struct file* filep);
 // static ssize_t          loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset);
 
 
-static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset);
+static ssize_t loop_write(struct file* filep, const char __user* buffer, unsigned long int len, loff_t* offset);
+// static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset);
 // static ssize_t          loop_write(struct file *pfile, const char __user *buffer, size_t u_len, loff_t *offset);
 static ssize_t          loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset);
 
