@@ -134,7 +134,7 @@ static void __exit loop_exit(void)
 {
     if (output_file)
         filp_close(output_file, NULL);
-    device_destroy(loop_device, MKDEV(major_number, 0));
+    device_destroy(loop_class, MKDEV(major_number, 0));
     class_unregister(loop_class);
     class_destroy(loop_class);
     unregister_chrdev(major_number, DEVICE_NAME);
