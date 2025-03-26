@@ -19,7 +19,7 @@
 #define WRITE_BUFFER_SIZE 4096
 struct file             *output_file;
 dev_t                   dev_fd = 0;
-uint8_t *               kernel_buffer; 
+// uint8_t *               kernel_buffer; 
 static int              major_number;
 static struct class*    loop_class = NULL;
 static struct device*   loop_device = NULL;
