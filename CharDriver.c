@@ -22,10 +22,10 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
     char* kernel_buffer;
-    ssize_t ret = 0;
+    unsigned int ret = 0;
     loff_t pos = 0;
 
-    kernel_buffer = kmalloc(len + 1, GFP_KERNEL);
+    kernel_buffer = kvmalloc(len + 1, GFP_KERNEL);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
@@ -39,7 +39,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    size_t padded_len = len;
+    unsigned int padded_len = len;
     if (len % 2 != 0)
     {
         kernel_buffer[len] = 0x00;
@@ -59,12 +59,12 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
     }
     // Prepare hex formatting and write to the output file
-    size_t i = 0;
+    unsigned int i = 0;
     char hex_buffer[80];
     while (i < padded_len)
     {
         int line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
-        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07zx ", (size_t)i);
+        int offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07zx ", (unsigned int)i);
     
         for (int j = 0; j < line_len; j += 2)
         {
@@ -94,7 +94,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
     ret = len;
 out:
-    kfree(kernel_buffer);
+    kvfree(kernel_buffer);
     return ret;
 }
 
