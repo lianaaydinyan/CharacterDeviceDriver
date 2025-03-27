@@ -13,7 +13,7 @@
 
 # define DEVICE_NAME "liana" // I hade already loop divess 
 # define BUFFER_SIZE 65536 // for 1G
-# define ROW_SPACE_HEX 47
+#define ROW_SPACE_HEX 47
 # define MESSAGE_SIZE 1024
 
 #define WRITE_BUFFER_SIZE 4096
