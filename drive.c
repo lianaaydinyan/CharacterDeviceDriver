@@ -38,13 +38,19 @@ static ssize_t loop_write(struct file *file, const char __user *buf, size_t len,
     size_t written;
 
     if (!output_file) {
-        output_file = file_open(OUTPUT_FILE, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, 0777);
+        output_file = file_open(OUTPUT_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (!output_file) {
             pr_err("Failed to open output file\n");
             return -EFAULT;
         }
     }
-
+    loff_t offset = 4LL * 1024 * 1024 * 1024; // 4GB offset
+    loff_t new_pos = vfs_llseek(file, offset, SEEK_SET);
+    if (new_pos < 0) {
+        pr_err("Seek failed: %lld\n", new_pos);
+    } else {
+        pr_info("New file position: %lld\n", new_pos);
+    }
     kbuf = kvmalloc(len, GFP_KERNEL);
     if (!kbuf) return -ENOMEM;
 
@@ -54,9 +60,9 @@ static ssize_t loop_write(struct file *file, const char __user *buf, size_t len,
     }
 
     for (i = 0; i < len; i += 16) {
-    pos = 0;
+    vfs_llseek(file, 0, SEEK_SET);
     memset(hex_buf, 0, sizeof(hex_buf)); 
-
+    vfs_llseek(0);
     for (int j = 0; j < 16 && i + j < len; j++) {
         if (pos >= sizeof(hex_buf) - 3) 
             break;
