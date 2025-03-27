@@ -22,53 +22,86 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
     return MESSAGE_SIZE;
 }
 
-define BUFFER_SIZE 4096  // Buffer size for efficient large file handling
+static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
+{
+    unsigned int ret = 0;
+    loff_t pos = 0;
 
-static ssize_t loop_write(struct file *file, const char __user *buffer, size_t len, loff_t *offset) {
-    char *kbuf;
-    char *hexbuf;
-    size_t i, j, chunk_size;
-    int bytes_written = 0;
-
-    if (len == 0) return 0;
-
-    kbuf = kmalloc(BUFFER_SIZE, GFP_KERNEL);
-    hexbuf = kmalloc(BUFFER_SIZE * 3 + 1, GFP_KERNEL);  // 1 byte -> 3 characters (XX )
-
-    if (!kbuf || !hexbuf) {
-        kfree(kbuf);
-        kfree(hexbuf);
+    kernel_buffer = kvmalloc(len + 1, GFP_KERNEL);
+    if (!kernel_buffer)
+    {
+        printk(KERN_ERR "loop: Failed to allocate memory\n");
         return -ENOMEM;
     }
 
-    while (len > 0) {
-        chunk_size = min(len, BUFFER_SIZE);
-
-        if (copy_from_user(kbuf, buffer, chunk_size)) {
-            kfree(kbuf);
-            kfree(hexbuf);
-            return -EFAULT;
-        }
-
-        // Convert to HEX format
-        for (i = 0, j = 0; i < chunk_size; i++) {
-            sprintf(&hexbuf[j], "%02x ", kbuf[i]);
-            j += 3;
-            if ((i + 1) % 16 == 0) hexbuf[j++] = '\n'; // New line every 16 bytes
-        }
-        hexbuf[j] = '\0';
-
-        // Write to the file in a single kernel_write() call
-        kernel_write(output_file, hexbuf, j, &output_file->f_pos);
-        buffer += chunk_size;
-        len -= chunk_size;
-        bytes_written += chunk_size;
+    if (copy_from_user(kernel_buffer, buffer, len))
+    {
+        printk(KERN_ERR "loop: Failed to copy data from user\n");
+        ret = -EFAULT;
+        goto out;
     }
 
-    kfree(kbuf);
-    kfree(hexbuf);
-    return bytes_written;
+    unsigned int padded_len = len;
+    if (len % 2 != 0)
+    {
+        kernel_buffer[len] = 0x00;
+        padded_len++;
+    }
+
+     // Open output file in write mode (create it if it doesn't exist)
+    if (!output_file)
+    {
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, 0777);
+        if (IS_ERR(output_file)) 
+        {
+            printk(KERN_ERR "loop: Failed to open file\n");
+            ret = PTR_ERR(output_file);
+            output_file = NULL;
+            goto out;
+        }
+    }
+    // Prepare hex formatting and write to the output file
+    unsigned int i = 0;
+    char hex_buffer[80];
+    uint8_t line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
+    int offset_chars = 0;
+    uint8_t j = 0;
+    while (i < padded_len)
+    {
+        line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
+        offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x,", (unsigned int)i);
+        for (j = 0; j < line_len; j += 2)
+        {
+            if (j + 1 < line_len)
+            {
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "%02x%02x", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
+                if (j + 2 < line_len)
+                    offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, " ");
+            }
+            else
+                offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
+        }
+        // Fill spaces until the required column width is reached as hexdump does
+        while (offset_chars < ROW_SPACE_HEX)
+            hex_buffer[offset_chars++] = ' ';
+        hex_buffer[offset_chars] = '\n';
+        hex_buffer[offset_chars + 1] = '\0';
+        ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+        if (ret < 0)
+        {
+            printk(KERN_ERR "loop: Failed to write in file\n");
+            goto out;
+        }
+        i += 16;
+    }
+    snprintf(hex_buffer, sizeof(hex_buffer), "%07lx\n", (unsigned int)len);
+    kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+    ret = len;
+out:
+    kvfree(kernel_buffer);
+    return ret;
 }
+
 // module loading
 static int __init loop_init(void)
 {

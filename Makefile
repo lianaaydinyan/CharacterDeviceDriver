@@ -1,7 +1,7 @@
 CONFIG_MODULE_SIG=n
 CONFIG_MODULE_SIG_ALL=n
 
-obj-m := CharDriver.o
+obj-m := drive.o
 KERNELDIR := /lib/modules/$(shell uname -r)/build
 
 all:
@@ -15,15 +15,15 @@ clean:
 
 load:
 	@clear
-	@echo Loading CharDriver into kernel . . . 
-	insmod CharDriver.ko
+	@echo Loading drive into kernel . . . 
+	insmod drive.ko
 	@echo ~DONE~
 
 	@echo Wait to check . . .
-	lsmod | grep CharDriver
+	lsmod | grep drive
 	@echo ~DONE~
 
-	@echo CharDriver ~ 
+	@echo drive ~ 
 	dmesg | tail
 	@echo ~DONE~
 
@@ -34,5 +34,5 @@ unload:
 	@echo ~DONE~
 
 	@echo Unloading module from the kernel
-	rmmod CharDriver
+	rmmod drive
 	@echo ~DONE~
