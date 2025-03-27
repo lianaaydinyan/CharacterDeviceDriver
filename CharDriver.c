@@ -1,49 +1,35 @@
 #include "header.h"
 
+static  char* kernel_buffer;
+static loff_t pos;
+static int count =0;
+static unsigned int total = 0;
+
 static int loop_open(struct inode *inode, struct file * file)
 {
-        if (0 == (kernel_buffer = kmalloc(MESSAGE_SIZE, GFP_KERNEL)))
-        {
-                printk(KERN_INFO "Cannot allocate memory\n");
-                return -1;
-        }
-        printk(KERN_INFO "Device file opened \n");
-        return 0;
+
+    printk(KERN_INFO "Device file opened \n");
+    return 0;
 }
 
 static int loop_release(struct inode * inode, struct file * file)
 {
-        kfree(kernel_buffer); 
         printk(KERN_INFO "Device file closed\n");
         return 0;
 }
 
 static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, loff_t* offset)
 {
-        if (copy_to_user(buffer, kernel_buffer, MESSAGE_SIZE)){
-                printk(KERN_ERR "Failed to copy data to user space");
-                return -EFAULT;
-        }
-        printk(KERN_INFO "Data Read Done \n");
-        return MESSAGE_SIZE;
+    printk(KERN_INFO "Data Read Done \n");
+    return MESSAGE_SIZE;
 }
-#define BYTES_PER_LINE 16
-#define HEX_BUFFER_SIZE 100  // Define a safe upper bound
-
-//static loff_t pos ;
-
+///static unsigned int i =0;
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
-    char* kernel_buffer;
-    size_t ret = 0;
-    loff_t pos = *offset;
-    printk(KERN_INFO "loop_write: Initial offset = %lld\n", *offset);
-    // Manually increment `pos` using the current offset
-    pos += *offset;
-    printk(KERN_INFO "loop_write: Updated `pos` after increment = %lld\n", pos);
-    //printk(KERN_INFO "Current pos: %lld\n", pos);
-   // printk(Kern_INFO "Current offset: %lld\n", *offset);
-    kernel_buffer = kmalloc(len, GFP_KERNEL);
+    unsigned int ret = 0;
+    pos +=  *offset;
+   // printk(KERN_INFO "loop_write: Initial offset = %lld\n", pos);
+    kernel_buffer = kvmalloc(len + 1, GFP_KERNEL);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
@@ -57,17 +43,19 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    unsigned int padded_len = len + pos;
-    //if (len % 2 != 0)
-    //{
-     //   kernel_buffer[len] = 0x00;
-       // padded_len++;
-    //}
+    unsigned  int padded_len = len;
+    if (len % 2 != 0)
+    {
+        kernel_buffer[len] = 0x00;
+        padded_len++;
+    }
 
      // Open output file in write mode (create it if it doesn't exist)
-    if (!output_file) {
-        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC, 0777);
-        if (IS_ERR(output_file)) {
+    if (!output_file)
+    {
+        output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, 0777);
+        if (IS_ERR(output_file)) 
+        {
             printk(KERN_ERR "loop: Failed to open file\n");
             ret = PTR_ERR(output_file);
             output_file = NULL;
@@ -75,16 +63,17 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
     }
     // Prepare hex formatting and write to the output file
-    size_t i = 0;
-    char hex_buffer[49];
-    uint8_t line_len;
-    uint8_t j;
-    unsigned int offset_chars;
+    unsigned int i = 0;
+    char hex_buffer[80];
+    unsigned int line_len = 0;
+    unsigned int offset_chars = pos;
+    uint8_t j = 0;
+    unsigned long int off;
     while (i < padded_len)
     {
-        line_len = (padded_len - i >= 16) ? 16 : padded_len - i;
-        offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", (unsigned int)(i) );
-
+        line_len = (padded_len - i > 16) ? 16 : padded_len - i;
+        off = i + total;
+        offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07lx ", off);
         for (j = 0; j < line_len; j += 2)
         {
             if (j + 1 < line_len)
@@ -96,8 +85,7 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
             else
                 offset_chars += snprintf(hex_buffer + offset_chars, sizeof(hex_buffer) - offset_chars, "00%02x", kernel_buffer[i + j]);
         }
-        // Fill spaces until the required column width is reached as hexdump does
-        while (offset_chars < ROW_SPACE_HEX)
+        while (offset_chars < 47)
             hex_buffer[offset_chars++] = ' ';
         hex_buffer[offset_chars] = '\n';
         hex_buffer[offset_chars + 1] = '\0';
@@ -109,11 +97,17 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
         i += 16;
     }
-    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len);
+    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len + total);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
+    *offset = pos;
+    printk(KERN_INFO "Last offset %lld\n", pos);
+    printk(KERN_INFO "file struct %u\n",filep->f_pos); 
     ret = len;
+    count++;
+    total += 131072;
+    printk(KERN_INFO "how many times %i",count);
 out:
-    kfree(kernel_buffer);
+    kvfree(kernel_buffer);
     return ret;
 }
 
@@ -135,7 +129,6 @@ static int __init loop_init(void)
         printk(KERN_ERR "loop: Failed to register device class\n");
         return PTR_ERR(loop_class);
     }
-     // Create the device node in /dev
     loop_device = device_create(loop_class, NULL, MKDEV(major_number, 0), NULL, DEVICE_NAME);
     if (IS_ERR(loop_device))
     {
