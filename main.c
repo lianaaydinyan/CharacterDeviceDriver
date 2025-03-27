@@ -34,8 +34,8 @@ static struct file *file_open(const char *path, int flags, int rights) {
 static ssize_t loop_write(struct file *file, const char __user *buf, size_t len, loff_t *ppos) {
     unsigned char *kbuf;
     char hex_buf[49];
-    loff_t pos = 0;
-    // unsigned int written;
+    unsigned int i, pos;
+    size_t written;
 
     if (!output_file) {
         output_file = file_open(OUTPUT_FILE, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, 0777);
@@ -52,43 +52,30 @@ static ssize_t loop_write(struct file *file, const char __user *buf, size_t len,
         kfree(kbuf);
         return -EFAULT;
     }
-    ////////////////////////////// please loo k at this block and integrate it to my code /////
-    unsigned int i = 0;
-    uint8_t line_len = (len - i >= 16) ? 16 : len - i;
-    int offset_chars = 0;
-    uint8_t j = 0;
-    while (i < len)
-    {
-        line_len = (len - i >= 16) ? 16 : len - i;
-        offset_chars = snprintf(hex_buf, sizeof(hex_buf), "%07x,", (unsigned int)i);
-        for (j = 0; j < line_len; j += 2)
-        {
-            if (j + 1 < line_len)
-            {
-                offset_chars += snprintf(hex_buf + offset_chars, sizeof(hex_buf) - offset_chars, "%02x%02x", kernel_buffer[i + j + 1], kernel_buffer[i + j]);
-                if (j + 2 < line_len)
-                    offset_chars += snprintf(hex_buf + offset_chars, sizeof(hex_buf) - offset_chars, " ");
-            }
-            else
-                offset_chars += snprintf(hex_buf + offset_chars, sizeof(hex_buf) - offset_chars, "00%02x", kernel_buffer[i + j]);
-        }
-        // Fill spaces until the required column width is reached as hexdump does
-        while (offset_chars < ROW_SPACE_HEX)
-            hex_buf[offset_chars++] = ' ';
-        hex_buf[offset_chars] = '\n';
-        hex_buf[offset_chars + 1] = '\0';
-        ret = kernel_write(output_file, hex_buf, strlen(hex_buf), &pos);
-        if (ret < 0)
-        {
-            printk(KERN_ERR "loop: Failed to write in file\n");
-            goto out;
-        }
-        i += 16;
+
+    for (i = 0; i < len; i += 16) {
+    pos = 0;
+    memset(hex_buf, 0, sizeof(hex_buf)); 
+
+    for (int j = 0; j < 16 && i + j < len; j++) {
+        if (pos >= sizeof(hex_buf) - 3) 
+            break;
+        pos += snprintf(hex_buf + pos, sizeof(hex_buf) - pos, "%02X ", (unsigned char)kbuf[i + j]);
     }
-    snprintf(hex_buf, sizeof(hex_buf), "%07lx\n", (unsigned int)len);
-    kernel_write(output_file, hex_buf, strlen(hex_buf), &pos);
-    ret = len;
-    //////////////////////////////
+
+    if (pos < sizeof(hex_buf) - 2) {  
+        hex_buf[pos++] = '\n';
+        hex_buf[pos] = '\0';  
+    }
+
+    written = kernel_write(output_file, hex_buf, strlen(hex_buf), &output_file->f_pos);
+    if (written < 0) {
+        pr_err("Error writing to file\n");
+        kvfree(kbuf);
+        return written;
+    }
+}
+
     kvfree(kbuf);
     return len;
 }
