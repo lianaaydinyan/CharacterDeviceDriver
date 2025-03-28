@@ -24,12 +24,14 @@ static ssize_t loop_read(struct file * filep, char __user * buffer, size_t len, 
     return MESSAGE_SIZE;
 }
 ///static unsigned int i =0;
+
+
 static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t len, loff_t* offset)
 {
     unsigned int ret = 0;
     pos +=  *offset;
    // printk(KERN_INFO "loop_write: Initial offset = %lld\n", pos);
-    kernel_buffer = kvmalloc(len + 1, GFP_KERNEL);
+    kernel_buffer = kvmalloc(len + 1 , GFP_KERNEL);
     if (!kernel_buffer)
     {
         printk(KERN_ERR "loop: Failed to allocate memory\n");
@@ -43,37 +45,39 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         goto out;
     }
 
-    unsigned  int padded_len = len;
-    if (len % 2 != 0)
-    {
-        kernel_buffer[len] = 0x00;
-        padded_len++;
-    }
+
 
      // Open output file in write mode (create it if it doesn't exist)
     if (!output_file)
     {
         output_file = filp_open("/tmp/output", O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, 0777);
-        if (IS_ERR(output_file)) 
+        if (IS_ERR(output_file))
         {
             printk(KERN_ERR "loop: Failed to open file\n");
             ret = PTR_ERR(output_file);
             output_file = NULL;
             goto out;
         }
+    
     }
+     unsigned  int padded_len = len;
+    //if (len % 2 != 0)
+    //{
+      //  kernel_buffer[len] = 0x00;
+        //padded_len++;
+   // }
     // Prepare hex formatting and write to the output file
     unsigned int i = 0;
     char hex_buffer[80];
-    unsigned int line_len = 0;
-    unsigned int offset_chars = pos;
     uint8_t j = 0;
-    unsigned long int off;
+    unsigned int offset_chars;
+    uint8_t line_len ;
     while (i < padded_len)
     {
+        memset(hex_buffer, 0, sizeof(hex_buffer));
         line_len = (padded_len - i > 16) ? 16 : padded_len - i;
-        off = i + total;
-        offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07lx ", off);
+        offset_chars = snprintf(hex_buffer, sizeof(hex_buffer), "%07x ", i + total);
+
         for (j = 0; j < line_len; j += 2)
         {
             if (j + 1 < line_len)
@@ -87,8 +91,8 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
         while (offset_chars < 47)
             hex_buffer[offset_chars++] = ' ';
-        hex_buffer[offset_chars] = '\n';
-        hex_buffer[offset_chars + 1] = '\0';
+        hex_buffer[offset_chars++] = '\n';
+        hex_buffer[offset_chars] = '\0';
         ret = kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
         if (ret < 0)
         {
@@ -97,15 +101,15 @@ static ssize_t loop_write(struct file* filep, const char __user* buffer, size_t 
         }
         i += 16;
     }
-    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len + total);
+    snprintf(hex_buffer, sizeof(hex_buffer), "%07x\n", (unsigned int)len+total);
+    
+    printk(KERN_INFO "loop: Writing to buffer: %s", hex_buffer);
     kernel_write(output_file, hex_buffer, strlen(hex_buffer), &pos);
     *offset = pos;
-    printk(KERN_INFO "Last offset %lld\n", pos);
-    printk(KERN_INFO "file struct %u\n",filep->f_pos); 
     ret = len;
-    count++;
-    total += 131072;
-    printk(KERN_INFO "how many times %i",count);
+    total += len;
+    printk(KERN_INFO "loop: ii = %u, padded_lenn = %u, toootal = %u, leeen = %u\n",
+       i, padded_len, total, (unsigned int)len);
 out:
     kvfree(kernel_buffer);
     return ret;
